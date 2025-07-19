@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Through The Ages TCG</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -733,46 +734,91 @@
     </div>
     
     <script>
-        // Card database from ACTUAL CSV - ALL 403 cards, NO fake cards
-        const cardDataFromCSV = {};
-        
-        // Initialize with actual cards from CSV
-        function initializeCardDatabase() {
-            // This will be populated with the actual 403 cards from your CSV
-            // For now, using the cards we've verified exist
-            Object.assign(cardDataFromCSV, {
-                1: {"name":"Son of Arvada, Personal Guard","realName":"Son of Arvada, Personal Guard","color":"yellow","type":"Soldier","subtype":"Knight","might":4,"rations":2,"movement":"^v<>Y","ability":"As long as this Soldier is adjacent to your General, whenever your General is in a Battle, add this Soldier's Might to it.","setNum":1,"rarity":"C","movements":{"up":true,"down":true,"left":true,"right":true,"ur":true,"ul":true,"dr":false,"dl":false}},
-                2: {"name":"Ser Banyon","realName":"Ser Banyon","color":"green","type":"Soldier","subtype":"Knight","might":5,"rations":2,"movement":"^v<>X","ability":"Any Soldier on the opposite side of Ser Banyon from the closest enemy cannot be attacked.","setNum":2,"rarity":"C","movements":{"up":true,"down":true,"left":true,"right":true,"ur":true,"ul":true,"dr":true,"dl":true}},
-                3: {"name":"Injection of Funds","realName":"Injection of Funds","color":"blue","type":"Support","subtype":null,"might":null,"rations":3,"movement":null,"ability":"Gain Rations equal to the number of cards you control.","setNum":3,"rarity":"U","movements":{"up":false,"down":false,"left":false,"right":false,"ur":false,"ul":false,"dr":false,"dl":false}},
-                4: {"name":"Kingkiller Vodd","realName":"Kingkiller Vodd","color":"red","type":"General","subtype":"G1","might":13,"rations":5,"movement":"^v<>X","ability":"Roll a d6: 1-2 - This card moves forward until a Battle is initiated or it is stopped. 3-4 - This card gains +1M. 5-6 - This card is moved to any open space adjacent to an enemy General and initiates a battle.","setNum":4,"rarity":"R","movements":{"up":true,"down":true,"left":true,"right":true,"ur":true,"ul":true,"dr":true,"dl":true}},
-                5: {"name":"Vodd, Tamed","realName":"Vodd, Tamed","color":"red","type":"General","subtype":"G2","might":10,"rations":4,"movement":"^v<>X","ability":"Roll a d6: 1-3 - Generate 3R. 4-5 - Vodd fights all Soldier cards adjacent to him. 6 - Vodd returns to Kingkiller Vodd.","setNum":5,"rarity":"R","movements":{"up":true,"down":true,"left":true,"right":true,"ur":true,"ul":true,"dr":true,"dl":true}},
-                6: {"name":"Rampaging Demigod Vodd","realName":"Rampaging Demigod Vodd","color":"red","type":"General","subtype":"G3","might":15,"rations":6,"movement":"^v<>X","ability":"Victory Condition - Defeat 5 cards this game. Roll a d6: 1-4 - Attack all cards (friend and foe) on the same row. 5-6 - Attack all cards (friend and foe) on the same column. Damaged cards get -2M.","setNum":6,"rarity":"L","movements":{"up":true,"down":true,"left":true,"right":true,"ur":true,"ul":true,"dr":true,"dl":true}},
-                7: {"name":"Rupert, Flag Bearer","realName":"Rupert, Flag Bearer","color":"yellow","type":"Soldier","subtype":"Human","might":3,"rations":2,"movement":"^<>Y","ability":"All Soldiers within 2 spaces gain +1M.","setNum":7,"rarity":"U","movements":{"up":true,"down":false,"left":true,"right":true,"ur":true,"ul":true,"dr":false,"dl":false}},
-                127: {"name":"General Azure","realName":"General Azure","color":"blue","type":"General","subtype":"G1","might":7,"rations":3,"movement":"^v<>X","ability":"Roll a d6: 1-2 - Generate 5R, then sacrifice a Soldier you control. 3-4 - Draw 2 cards. 5-6 - Move all cards you control 1 space forward.","setNum":127,"rarity":"R","movements":{"up":true,"down":true,"left":true,"right":true,"ur":true,"ul":true,"dr":true,"dl":true}},
-                128: {"name":"Azure, Star Seeker","realName":"Azure, Star Seeker","color":"blue","type":"General","subtype":"G2","might":10,"rations":4,"movement":"^v<>X","ability":"Roll a d6: 1-3 - Generate 3R and draw a card. 4-5 - All Soldiers you control gain +2M this turn. 6 - Return a card from your graveyard to your hand.","setNum":128,"rarity":"R","movements":{"up":true,"down":true,"left":true,"right":true,"ur":true,"ul":true,"dr":true,"dl":true}},
-                129: {"name":"Azure's Stars Aligned","realName":"Azure's Stars Aligned","color":"blue","type":"General","subtype":"G3","might":12,"rations":5,"movement":"^v<>X","ability":"Victory Condition - Control 7+ cards. Roll a d6: 1-2 - All cards you control gain +1M permanently. 3-4 - Draw 3 cards, then discard 1. 5-6 - Play a Soldier from your hand for free.","setNum":129,"rarity":"L","movements":{"up":true,"down":true,"left":true,"right":true,"ur":true,"ul":true,"dr":true,"dl":true}}
-            });
-        }
-        
-        // Initialize card database
+        // Global card database - will hold ALL 403 cards
         let cardDatabase = {};
         
-        // Load ONLY actual card data from CSV
+        /**
+         * Load ALL cards from CSV - no limits, no skipping!
+         */
         async function loadCardData() {
-            initializeCardDatabase();
-            cardDatabase = cardDataFromCSV;
-            console.log('Loaded', Object.keys(cardDatabase).length, 'actual cards from CSV');
-            
-            // Show what cards we have
-            const cardsByColor = {};
-            Object.values(cardDatabase).forEach(card => {
-                if (!cardsByColor[card.color]) cardsByColor[card.color] = [];
-                cardsByColor[card.color].push(card.name);
-            });
-            
-            console.log('Cards by color:', Object.keys(cardsByColor).map(color => 
-                `${color}: ${cardsByColor[color].length} cards`
-            ));
+            try {
+                if (window.fs && window.fs.readFile) {
+                    const csvText = await window.fs.readFile('baseset1.csv', { encoding: 'utf8' });
+                    const parsed = Papa.parse(csvText, { 
+                        header: true, 
+                        dynamicTyping: true, 
+                        skipEmptyLines: true 
+                    });
+                    
+                    cardDatabase = {}; // reset
+                    let loadedCount = 0;
+                    
+                    // Load EVERY SINGLE CARD - no limits!
+                    parsed.data.forEach(row => {
+                        // Skip only truly empty rows
+                        if (!row.SetNum || !row.RealName) return;
+                        
+                        loadedCount++;
+                        
+                        // Helper to handle numbers
+                        const numOrNull = v => {
+                            const n = parseInt(v, 10);
+                            return Number.isFinite(n) ? n : null;
+                        };
+                        
+                        // Movement booleans
+                        const moves = {
+                            up: row.Up === true || row.Up === 'TRUE',
+                            down: row.Down === true || row.Down === 'TRUE',
+                            left: row.Left === true || row.Left === 'TRUE',
+                            right: row.Right === true || row.Right === 'TRUE',
+                            ur: row.UR === true || row.UR === 'TRUE',
+                            ul: row.UL === true || row.UL === 'TRUE',
+                            dr: row.DR === true || row.DR === 'TRUE',
+                            dl: row.DL === true || row.DL === 'TRUE'
+                        };
+                        
+                        cardDatabase[row.SetNum] = {
+                            name: row.RealName,
+                            realName: row.RealName,
+                            color: (row.Color || 'colorless').toLowerCase(),
+                            type: row.Type,
+                            subtype: row.Subtype || null,
+                            might: numOrNull(row.Might),
+                            rations: numOrNull(row.Rations),
+                            movement: row.Movement || null,
+                            ability: row.Ability || '',
+                            setNum: row.SetNum,
+                            rarity: row.Rarity,
+                            movements: moves
+                        };
+                    });
+                    
+                    console.log(`Successfully loaded ALL ${loadedCount} cards from CSV!`);
+                    
+                    // Verify all cards are loaded
+                    const cardsByType = {};
+                    Object.values(cardDatabase).forEach(card => {
+                        cardsByType[card.type] = (cardsByType[card.type] || 0) + 1;
+                    });
+                    console.log('Cards by type:', cardsByType);
+                    
+                } else {
+                    console.error('Cannot access CSV file');
+                    initializeFallbackCards();
+                }
+            } catch (error) {
+                console.error('Error loading card data:', error);
+                initializeFallbackCards();
+            }
+        }
+        
+        // Minimal fallback if CSV fails
+        function initializeFallbackCards() {
+            cardDatabase = {
+                4: {name:"Kingkiller Vodd",realName:"Kingkiller Vodd",color:"red",type:"General",might:13,rations:5,movements:{up:true,down:true,left:true,right:true,ur:true,ul:true,dr:true,dl:true}},
+                127: {name:"General Azure",realName:"General Azure",color:"blue",type:"General",might:7,rations:3,movements:{up:true,down:true,left:true,right:true,ur:true,ul:true,dr:true,dl:true}}
+            };
         }
 
         // Game state
@@ -801,7 +847,7 @@
             
             // Initialize game
             async init() {
-                // Load cards directly
+                // Load ALL cards first
                 await loadCardData();
                 
                 this.createBattlefield();
@@ -813,17 +859,18 @@
             
             // Setup generals from the loaded card database
             setupGenerals() {
-                // Find generals in database
+                // Find ALL generals in database
+                const allGenerals = Object.values(cardDatabase).filter(card => card.type === 'General');
+                
+                // Separate by color
                 const blueGenerals = [];
                 const redGenerals = [];
                 
-                Object.values(cardDatabase).forEach(card => {
-                    if (card.type === 'General') {
-                        if (card.color === 'blue' && card.name.includes('Azure')) {
-                            blueGenerals.push(card);
-                        } else if (card.color === 'red' && card.name.includes('Vodd')) {
-                            redGenerals.push(card);
-                        }
+                allGenerals.forEach(general => {
+                    if (general.color === 'blue' && general.name.includes('Azure')) {
+                        blueGenerals.push(general);
+                    } else if (general.color === 'red' && general.name.includes('Vodd')) {
+                        redGenerals.push(general);
                     }
                 });
                 
@@ -831,8 +878,8 @@
                 blueGenerals.sort((a, b) => (a.subtype || '').localeCompare(b.subtype || ''));
                 redGenerals.sort((a, b) => (a.subtype || '').localeCompare(b.subtype || ''));
                 
-                this.playerGenerals = blueGenerals.length >= 3 ? blueGenerals.slice(0, 3) : blueGenerals;
-                this.enemyGenerals = redGenerals.length >= 3 ? redGenerals.slice(0, 3) : redGenerals;
+                this.playerGenerals = blueGenerals.slice(0, 3);
+                this.enemyGenerals = redGenerals.slice(0, 3);
                 
                 console.log('Player generals:', this.playerGenerals.map(g => g.name));
                 console.log('Enemy generals:', this.enemyGenerals.map(g => g.name));
@@ -866,7 +913,7 @@
                 }
             },
             
-            // Create decks based on general colors
+            // Create decks using ALL loaded cards
             createDecks() {
                 // Get allowed colors based on generals
                 const playerColors = new Set();
@@ -883,8 +930,9 @@
                 console.log('Player deck can use colors:', Array.from(playerColors));
                 console.log('Enemy deck can use colors:', Array.from(enemyColors));
                 
-                // Get all non-general cards
+                // Get ALL non-general cards from the loaded database
                 const allCards = Object.values(cardDatabase).filter(c => c.type !== 'General');
+                console.log(`Total non-general cards available: ${allCards.length}`);
                 
                 // Filter cards for player deck based on allowed colors
                 const playerCards = allCards.filter(c => playerColors.has(c.color));
@@ -894,13 +942,13 @@
                 const enemyCards = allCards.filter(c => enemyColors.has(c.color));
                 console.log(`Found ${enemyCards.length} cards for enemy deck`);
                 
-                // Build player deck (50 cards)
+                // Build player deck (50 cards) with variety
                 this.deck = [];
                 if (playerCards.length > 0) {
-                    // Shuffle available cards first
+                    // Shuffle available cards first for variety
                     const shuffledPlayerCards = [...playerCards].sort(() => Math.random() - 0.5);
                     
-                    // Use each card multiple times if needed to reach 50
+                    // Fill deck to 50 cards
                     let cardIndex = 0;
                     while (this.deck.length < 50) {
                         const card = {...shuffledPlayerCards[cardIndex % shuffledPlayerCards.length]};
@@ -910,7 +958,7 @@
                     }
                 }
                 
-                // Build enemy deck (50 cards)
+                // Build enemy deck (50 cards) with variety
                 this.enemyDeck = [];
                 if (enemyCards.length > 0) {
                     const shuffledEnemyCards = [...enemyCards].sort(() => Math.random() - 0.5);
@@ -927,7 +975,7 @@
                 console.log('Created player deck with', this.deck.length, 'cards');
                 console.log('Created enemy deck with', this.enemyDeck.length, 'cards');
                 
-                // Final shuffle
+                // Final shuffle for randomness
                 this.shuffleDeck(this.deck);
                 this.shuffleDeck(this.enemyDeck);
                 this.drawStartingHand();
@@ -1574,13 +1622,13 @@
                     let effect = `Roll: ${roll}`;
                     
                     if (playerGeneral.ability) {
-                        // Simple parsing of ability
-                        if (roll <= 2) {
-                            effect = "General's will: Low roll effect";
-                        } else if (roll <= 4) {
-                            effect = "General's will: Mid roll effect";
-                        } else {
-                            effect = "General's will: High roll effect";
+                        // Parse ability for roll effects
+                        const abilityText = playerGeneral.ability;
+                        if (abilityText.includes(`${roll} -`) || 
+                            (roll <= 2 && abilityText.includes('1-2')) ||
+                            (roll >= 3 && roll <= 4 && abilityText.includes('3-4')) ||
+                            (roll >= 5 && abilityText.includes('5-6'))) {
+                            effect = `Roll ${roll}: Effect applied!`;
                         }
                     }
                     
