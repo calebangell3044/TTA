@@ -1,1686 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Through The Ages TCG</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a1a;
-            color: #e0e0e0;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-        }
-
-        /* Top Bar */
-        #top-bar {
-            background: #2a2a2a;
-            border-bottom: 2px solid #444;
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        #player-info {
-            display: flex;
-            gap: 30px;
-        }
-
-        .resource-display {
-            display: flex;
-            align-items: center;
-            font-size: 18px;
-        }
-
-        .resource-icon {
-            width: 30px;
-            height: 30px;
-            margin-right: 10px;
-            background: #444;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #turn-info {
-            text-align: center;
-        }
-
-        #phase-display {
-            font-size: 24px;
-            color: #f0c674;
-            margin-bottom: 5px;
-        }
-
-        #actions-display {
-            font-size: 16px;
-        }
-
-        #deck-counts {
-            font-size: 14px;
-            color: #888;
-            margin-top: 5px;
-        }
-
-        #controls {
-            display: flex;
-            gap: 10px;
-        }
-
-        /* Main Game Area */
-        #game-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-
-        /* Battlefield */
-        #battlefield-container {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        #battlefield {
-            background: #1a1a1a;
-            border: 2px solid #444;
-            border-radius: 8px;
-            position: relative;
-        }
-
-        #grid {
-            position: relative;
-        }
-
-        .grid-cell {
-            position: absolute;
-            border: 1px solid #333;
-            background: rgba(0, 0, 0, 0.3);
-            transition: all 0.3s;
-        }
-
-        .grid-cell:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: #666;
-        }
-
-        .grid-cell.valid-move {
-            background: rgba(100, 255, 100, 0.2);
-            border-color: #4f4;
-        }
-
-        .grid-cell.enemy-occupied {
-            background: rgba(255, 100, 100, 0.2);
-            border-color: #f44;
-        }
-
-        /* Cards on Battlefield */
-        .battlefield-card {
-            position: absolute;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            z-index: 10;
-            background: #333;
-            border: 2px solid #222;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .battlefield-card:hover {
-            z-index: 100;
-            transform: scale(3) translateY(-20px);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9);
-            width: auto !important;
-            height: auto !important;
-            min-width: 200px;
-            min-height: 280px;
-        }
-
-        .battlefield-card.selected {
-            border-color: #f0c674;
-            box-shadow: 0 0 20px rgba(240, 198, 116, 0.5);
-        }
-
-        .battlefield-card.enemy {
-            border-color: #c66;
-        }
-
-        /* Hand Container at Bottom */
-        #hand-container {
-            background: #2a2a2a;
-            border-top: 2px solid #444;
-            padding: 20px;
-            height: 200px;
-        }
-
-        #hand-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        #hand-header h3 {
-            color: #81b3d3;
-        }
-
-        #hand {
-            display: flex;
-            gap: 10px;
-            overflow-x: auto;
-            height: 150px;
-        }
-
-        .hand-card {
-            min-width: 100px;
-            width: 100px;
-            height: 140px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s;
-            position: relative;
-            background: #333;
-            overflow: hidden;
-            border: 2px solid #222;
-        }
-
-        .hand-card:hover {
-            transform: translateY(-20px) scale(2.5);
-            z-index: 1000;
-            width: auto !important;
-            height: auto !important;
-            min-width: 200px;
-            min-height: 280px;
-        }
-
-        .hand-card.selected {
-            border: 3px solid #f0c674;
-            transform: translateY(-10px);
-        }
-
-        /* Card Design */
-        .card-content {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            background: #222;
-        }
-
-        .card-banner {
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 30%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 5px;
-            color: white;
-            font-weight: bold;
-        }
-
-        .card-banner.red { background: linear-gradient(180deg, #d44, #922); }
-        .card-banner.blue { background: linear-gradient(180deg, #48d, #269); }
-        .card-banner.green { background: linear-gradient(180deg, #4d4, #292); }
-        .card-banner.yellow { background: linear-gradient(180deg, #da4, #a82); }
-        .card-banner.purple { background: linear-gradient(180deg, #94d, #629); }
-        .card-banner.brown { background: linear-gradient(180deg, #a84, #642); }
-        .card-banner.colorless { background: linear-gradient(180deg, #888, #555); }
-
-        .might-circle {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: white;
-            color: black;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            font-weight: bold;
-            margin-top: 10px;
-            position: relative;
-        }
-
-        .movement-indicators {
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            top: -10px;
-            left: -10px;
-        }
-
-        .movement-arrow {
-            position: absolute;
-            width: 0;
-            height: 0;
-            border-style: solid;
-            opacity: 0.7;
-        }
-
-        .movement-arrow.up {
-            top: -5px;
-            left: 50%;
-            transform: translateX(-50%);
-            border-width: 0 5px 8px 5px;
-            border-color: transparent transparent #fff transparent;
-        }
-
-        .movement-arrow.down {
-            bottom: -5px;
-            left: 50%;
-            transform: translateX(-50%);
-            border-width: 8px 5px 0 5px;
-            border-color: #fff transparent transparent transparent;
-        }
-
-        .movement-arrow.left {
-            left: -5px;
-            top: 50%;
-            transform: translateY(-50%);
-            border-width: 5px 8px 5px 0;
-            border-color: transparent #fff transparent transparent;
-        }
-
-        .movement-arrow.right {
-            right: -5px;
-            top: 50%;
-            transform: translateY(-50%);
-            border-width: 5px 0 5px 8px;
-            border-color: transparent transparent transparent #fff;
-        }
-
-        .movement-arrow.ur {
-            top: 0;
-            right: 0;
-            border-width: 0 0 10px 10px;
-            border-color: transparent transparent #fff transparent;
-            transform: rotate(45deg);
-            transform-origin: bottom left;
-        }
-
-        .movement-arrow.ul {
-            top: 0;
-            left: 0;
-            border-width: 0 10px 10px 0;
-            border-color: transparent transparent #fff transparent;
-            transform: rotate(-45deg);
-            transform-origin: bottom right;
-        }
-
-        .movement-arrow.dr {
-            bottom: 0;
-            right: 0;
-            border-width: 10px 0 0 10px;
-            border-color: #fff transparent transparent transparent;
-            transform: rotate(-45deg);
-            transform-origin: top left;
-        }
-
-        .movement-arrow.dl {
-            bottom: 0;
-            left: 0;
-            border-width: 10px 10px 0 0;
-            border-color: #fff transparent transparent transparent;
-            transform: rotate(45deg);
-            transform-origin: top right;
-        }
-
-        .ration-cost {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: #444;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            margin-top: 10px;
-        }
-
-        .card-type {
-            writing-mode: vertical-lr;
-            font-size: 10px;
-            margin-top: 10px;
-            text-transform: uppercase;
-        }
-
-        .card-art {
-            position: absolute;
-            left: 30%;
-            top: 0;
-            right: 0;
-            bottom: 25%;
-            background: #444;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            color: #888;
-            text-align: center;
-            padding: 5px;
-        }
-
-        .card-name {
-            position: absolute;
-            bottom: 25%;
-            left: 30%;
-            right: 0;
-            padding: 5px;
-            background: rgba(0, 0, 0, 0.7);
-            font-size: 11px;
-            font-weight: bold;
-        }
-
-        .card-ability {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 25%;
-            background: linear-gradient(180deg, #444, #333);
-            border-top: 1px solid #555;
-            padding: 5px;
-            font-size: 9px;
-            overflow: visible;
-            line-height: 1.2;
-            min-height: 60px;
-        }
-        
-        /* Hover state for better card visibility */
-        .battlefield-card:hover .card-content,
-        .hand-card:hover .card-content {
-            width: 200px;
-            height: 280px;
-        }
-        
-        .battlefield-card:hover .card-ability,
-        .hand-card:hover .card-ability {
-            font-size: 11px;
-            height: auto;
-            min-height: 80px;
-        }
-        
-        .battlefield-card:hover .card-name,
-        .hand-card:hover .card-name {
-            font-size: 14px;
-        }
-
-        /* Encampment */
-        .encampment {
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle, #654, #432);
-            border: 3px solid #876;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 32px;
-            color: #fed;
-        }
-
-        /* UI Elements */
-        .button {
-            background: #48d;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background 0.3s;
-        }
-
-        .button:hover {
-            background: #5ae;
-        }
-
-        .button:disabled {
-            background: #666;
-            cursor: not-allowed;
-        }
-
-        .button.generate {
-            background: #4d4;
-        }
-
-        .button.generate:hover {
-            background: #5e5;
-        }
-
-        .button.end-turn {
-            background: #d84;
-        }
-
-        .button.end-turn:hover {
-            background: #e95;
-        }
-
-        /* Battle Modal */
-        #battle-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-        }
-
-        #battle-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #2a2a2a;
-            border-radius: 10px;
-            padding: 30px;
-            min-width: 400px;
-            border: 2px solid #666;
-        }
-
-        #battle-content h2 {
-            color: #f0c674;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .battle-card-display {
-            display: flex;
-            justify-content: space-around;
-            margin: 20px 0;
-        }
-
-        .battle-card-preview {
-            width: 120px;
-            height: 180px;
-            border-radius: 8px;
-            border: 2px solid #444;
-        }
-
-        #wager-display {
-            text-align: center;
-            font-size: 20px;
-            margin: 20px 0;
-        }
-
-        .wager-controls {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        /* Dice Roll Animation */
-        #dice-container {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            display: none;
-            z-index: 2000;
-        }
-
-        .dice {
-            width: 100px;
-            height: 100px;
-            background: white;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 48px;
-            font-weight: bold;
-            color: #333;
-            animation: roll 0.5s ease-out;
-        }
-
-        @keyframes roll {
-            0% { transform: rotate(0deg) scale(0.5); }
-            50% { transform: rotate(180deg) scale(1.2); }
-            100% { transform: rotate(360deg) scale(1); }
-        }
-
-        /* Victory Screen */
-        #victory-screen {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 3000;
-        }
-
-        #victory-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-        }
-
-        #victory-content h1 {
-            font-size: 72px;
-            color: #f0c674;
-            margin-bottom: 30px;
-            text-shadow: 0 0 20px rgba(240, 198, 116, 0.5);
-        }
-
-        /* Discard Selection Modal */
-        #discard-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-        }
-
-        #discard-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #2a2a2a;
-            border-radius: 10px;
-            padding: 30px;
-            max-width: 80%;
-            max-height: 80%;
-            overflow: auto;
-        }
-
-        #discard-cards {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin: 20px 0;
-        }
-
-        .discard-card {
-            width: 100px;
-            height: 140px;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid #444;
-            transition: all 0.2s;
-        }
-
-        .discard-card:hover {
-            transform: scale(1.1);
-            border-color: #f0c674;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Through the Ages – Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+/* ───────  Dark-mode palette  ─────── */
+:root{
+  --bg:#1e1e1e;
+  --surface:#2a2a2a;
+  --surface-alt:#333;
+  --border:#555;
+  --accent:#8ab4f8;
+}
+/* ───────  Page layout  ─────── */
+html,body{
+  height:100%;
+  margin:0;
+  background:var(--bg);
+  color:#e0e0e0;
+  font-family:'Segoe UI',Tahoma,Verdana,sans-serif;
+  display:flex;
+  flex-direction:column;
+}
+/* header reserve – tweak height if you need more space later */
+header{
+  flex:0 0 60px;
+  display:flex;
+  align-items:center;
+  padding:0 1rem;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+}
+header h1{
+  font-size:1rem;
+  font-weight:600;
+}
+/* main board area – grid size is JS-controlled */
+#board{
+  flex:1 1 auto;
+  display:grid;
+  gap:4px;
+  padding:10px;
+  background:var(--surface-alt);
+}
+.cell{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:4px;
+  position:relative;
+}
+.cell.highlight{
+  outline:2px dashed var(--accent);
+  outline-offset:-2px;
+}
+/* hand zone */
+#hand{
+  flex:0 0 160px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:0.5rem;
+  padding:0.5rem;
+  background:var(--surface);
+  border-top:1px solid var(--border);
+}
+.card{
+  width:80px;
+  height:120px;
+  background:#444;
+  border:2px solid var(--accent);
+  border-radius:6px;
+  cursor:grab;
+  user-select:none;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:.8rem;
+  text-align:center;
+  transition:transform .05s;
+}
+.card.dragging{
+  opacity:.7;
+  cursor:grabbing;
+  transform:rotate(3deg);
+}
+</style>
 </head>
 <body>
-    <div id="top-bar">
-        <div id="player-info">
-            <div class="resource-display">
-                <div class="resource-icon">⚔️</div>
-                <span>Rations: <span id="rations">0</span></span>
-            </div>
-            <div class="resource-display">
-                <div class="resource-icon">⚡</div>
-                <span>Actions: <span id="actions">0</span></span>
-            </div>
-            <div class="resource-display">
-                <div class="resource-icon">👑</div>
-                <span>General Lives: <span id="general-lives">3</span></span>
-            </div>
-        </div>
-        
-        <div id="turn-info">
-            <div id="phase-display">Generation Phase</div>
-            <div id="actions-display">Turn 1: Player 1</div>
-            <div id="deck-counts">
-                Your Deck: <span id="player-deck">0</span> | 
-                Enemy Deck: <span id="enemy-deck">0</span>
-            </div>
-        </div>
-        
-        <div id="controls">
-            <button class="button generate" id="generate-btn" onclick="game.generatePhase()">Generate Rations & Draw</button>
-            <button class="button" onclick="game.gainRation()">Gain Ration (1 Action)</button>
-            <button class="button end-turn" onclick="game.endTurn()">End Turn</button>
-        </div>
-    </div>
-    
-    <div id="game-area">
-        <div id="battlefield-container">
-            <div id="battlefield">
-                <div id="grid"></div>
-            </div>
-        </div>
-        
-        <div id="hand-container">
-            <div id="hand-header">
-                <h3>Your Hand (<span id="hand-count">0</span>)</h3>
-                <div id="hand-actions">
-                    <button class="button" onclick="game.showDiscardModal()">Discard for Rations</button>
-                </div>
-            </div>
-            <div id="hand"></div>
-        </div>
-    </div>
-    
-    <!-- Battle Modal -->
-    <div id="battle-modal">
-        <div id="battle-content">
-            <h2>Battle!</h2>
-            <div class="battle-card-display">
-                <div class="battle-card-preview" id="attacker-preview"></div>
-                <div style="align-self: center; font-size: 32px;">⚔️</div>
-                <div class="battle-card-preview" id="defender-preview"></div>
-            </div>
-            <div id="wager-display">
-                Battle Pot: <span id="battle-pot">0</span> Rations
-            </div>
-            <div class="wager-controls">
-                <button class="button" onclick="game.battle.raise()">Raise</button>
-                <button class="button" onclick="game.battle.call()">Call</button>
-                <button class="button" onclick="game.battle.fold()">Fold</button>
-            </div>
-            <div id="support-cards" style="margin-top: 20px;">
-                <h3>Support Cards</h3>
-                <div id="support-selection"></div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Discard Modal -->
-    <div id="discard-modal">
-        <div id="discard-content">
-            <h2>Select a Card to Discard for 1 Ration</h2>
-            <div id="discard-cards"></div>
-            <button class="button" onclick="game.hideDiscardModal()">Cancel</button>
-        </div>
-    </div>
-    
-    <!-- Dice Container -->
-    <div id="dice-container">
-        <div class="dice" id="dice"></div>
-    </div>
-    
-    <!-- Victory Screen -->
-    <div id="victory-screen">
-        <div id="victory-content">
-            <h1 id="victory-text">Victory!</h1>
-            <button class="button" onclick="location.reload()">New Game</button>
-        </div>
-    </div>
-    
-    <script>
-async function loadCardData () {
-  try {
-    // Adjust the path if your CSV lives in a sub-folder, e.g. './data/baseset1.csv'
-    const response = await fetch('./baseset1.csv', {cache: 'no-cache'});
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const csvText = await response.text();
+<header>
+  <h1>Through the Ages – Prototype</h1>
+</header>
 
-    const parsed = Papa.parse(csvText, {
-      header: true,
-      dynamicTyping: true,
-      skipEmptyLines: true
-    });
+<main id="board"></main>
 
-    cardDatabase = {};
-    parsed.data.forEach(row => {
-      if (!row.SetNum || !row.RealName) return;
+<section id="hand"></section>
 
-      const movements = ['up','down','left','right','ur','ul','dr','dl']
-        .reduce((obj, dir) => (obj[dir] = /TRUE/i.test(row[dir]), obj), {});
+<!-- PapaParse for future CSV imports -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+<script>
+/* ───────  Config  ─────── */
+const boardCols = 8;   // change when the rulebook defines exact grid
+const boardRows = 5;
 
-      cardDatabase[row.SetNum] = {
-        name: row.RealName,
-        realName: row.RealName,
-        color: (row.Color || 'colorless').toLowerCase(),
-        type: row.Type,
-        subtype: row.Subtype || null,
-        might: +row.Might || null,
-        rations: +row.Rations || null,
-        ability: row.Ability || '',
-        setNum: row.SetNum,
-        rarity: row.Rarity,
-        movements
-      };
-    });
+/* ───────  Build the board  ─────── */
+const board = document.getElementById('board');
+board.style.gridTemplateColumns = `repeat(${boardCols}, 1fr)`;
+board.style.gridTemplateRows   = `repeat(${boardRows}, 1fr)`;
 
-    console.log(`Loaded ${Object.keys(cardDatabase).length} cards from CSV`);
-  } catch (err) {
-    console.error('Error loading CSV – falling back to hard-coded cards', err);
-    initializeFallbackCards();
+for (let r = 0; r < boardRows; r++) {
+  for (let c = 0; c < boardCols; c++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.row = r;
+    cell.dataset.col = c;
+    board.appendChild(cell);
   }
 }
-</script>
 
-        // Game state
-        const game = {
-            currentPlayer: 1,
-            phase: 'generation',
-            actions: 0,
-            rations: 0,
-            generalLives: 3,
-            enemyGeneralLives: 3,
-            selectedCard: null,
-            selectedHandCard: null,
-            battlefield: {},
-            hand: [],
-            deck: [],
-            enemyDeck: [],
-            graveyard: [],
-            turn: 1,
-            gridSize: { rows: 10, cols: 8 },
-            cellSize: 80,
-            hasGenerated: false,
-            playerGenerals: [],
-            enemyGenerals: [],
-            currentPlayerGeneral: 0,
-            currentEnemyGeneral: 0,
-            
-            // Initialize game
-            async init() {
-                // Load ALL cards first
-                await loadCardData();
-                
-                this.createBattlefield();
-                this.setupGenerals();
-                this.createDecks();
-                this.placeStartingUnits();
-                this.updateUI();
-            },
-            
-            // Setup generals from the loaded card database
-            setupGenerals() {
-                // Find ALL generals in database
-                const allGenerals = Object.values(cardDatabase).filter(card => card.type === 'General');
-                
-                // Separate by color
-                const blueGenerals = [];
-                const redGenerals = [];
-                
-                allGenerals.forEach(general => {
-                    if (general.color === 'blue' && general.name.includes('Azure')) {
-                        blueGenerals.push(general);
-                    } else if (general.color === 'red' && general.name.includes('Vodd')) {
-                        redGenerals.push(general);
-                    }
-                });
-                
-                // Sort by subtype (G1, G2, G3)
-                blueGenerals.sort((a, b) => (a.subtype || '').localeCompare(b.subtype || ''));
-                redGenerals.sort((a, b) => (a.subtype || '').localeCompare(b.subtype || ''));
-                
-                this.playerGenerals = blueGenerals.slice(0, 3);
-                this.enemyGenerals = redGenerals.slice(0, 3);
-                
-                console.log('Player generals:', this.playerGenerals.map(g => g.name));
-                console.log('Enemy generals:', this.enemyGenerals.map(g => g.name));
-            },
-            
-            // Create battlefield grid
-            createBattlefield() {
-                const grid = document.getElementById('grid');
-                const battlefield = document.getElementById('battlefield');
-                const totalWidth = this.gridSize.cols * this.cellSize;
-                const totalHeight = this.gridSize.rows * this.cellSize;
-                
-                grid.style.width = totalWidth + 'px';
-                grid.style.height = totalHeight + 'px';
-                battlefield.style.width = totalWidth + 'px';
-                battlefield.style.height = totalHeight + 'px';
-                
-                for (let row = 0; row < this.gridSize.rows; row++) {
-                    for (let col = 0; col < this.gridSize.cols; col++) {
-                        const cell = document.createElement('div');
-                        cell.className = 'grid-cell';
-                        cell.style.width = this.cellSize + 'px';
-                        cell.style.height = this.cellSize + 'px';
-                        cell.style.left = (col * this.cellSize) + 'px';
-                        cell.style.top = (row * this.cellSize) + 'px';
-                        cell.dataset.row = row;
-                        cell.dataset.col = col;
-                        cell.onclick = () => this.handleCellClick(row, col);
-                        grid.appendChild(cell);
-                    }
-                }
-            },
-            
-            // Create decks using ALL loaded cards
-            createDecks() {
-                // Get allowed colors based on generals
-                const playerColors = new Set();
-                const enemyColors = new Set();
-                
-                // Player generals define allowed colors
-                this.playerGenerals.forEach(g => playerColors.add(g.color));
-                playerColors.add('colorless'); // Always allowed
-                
-                // Enemy generals define allowed colors  
-                this.enemyGenerals.forEach(g => enemyColors.add(g.color));
-                enemyColors.add('colorless'); // Always allowed
-                
-                console.log('Player deck can use colors:', Array.from(playerColors));
-                console.log('Enemy deck can use colors:', Array.from(enemyColors));
-                
-                // Get ALL non-general cards from the loaded database
-                const allCards = Object.values(cardDatabase).filter(c => c.type !== 'General');
-                console.log(`Total non-general cards available: ${allCards.length}`);
-                
-                // Filter cards for player deck based on allowed colors
-                const playerCards = allCards.filter(c => playerColors.has(c.color));
-                console.log(`Found ${playerCards.length} cards for player deck`);
-                
-                // Filter cards for enemy deck based on allowed colors
-                const enemyCards = allCards.filter(c => enemyColors.has(c.color));
-                console.log(`Found ${enemyCards.length} cards for enemy deck`);
-                
-                // Build player deck (50 cards) with variety
-                this.deck = [];
-                if (playerCards.length > 0) {
-                    // Shuffle available cards first for variety
-                    const shuffledPlayerCards = [...playerCards].sort(() => Math.random() - 0.5);
-                    
-                    // Fill deck to 50 cards
-                    let cardIndex = 0;
-                    while (this.deck.length < 50) {
-                        const card = {...shuffledPlayerCards[cardIndex % shuffledPlayerCards.length]};
-                        card.id = 'player_card_' + this.deck.length;
-                        this.deck.push(card);
-                        cardIndex++;
-                    }
-                }
-                
-                // Build enemy deck (50 cards) with variety
-                this.enemyDeck = [];
-                if (enemyCards.length > 0) {
-                    const shuffledEnemyCards = [...enemyCards].sort(() => Math.random() - 0.5);
-                    
-                    let cardIndex = 0;
-                    while (this.enemyDeck.length < 50) {
-                        const card = {...shuffledEnemyCards[cardIndex % shuffledEnemyCards.length]};
-                        card.id = 'enemy_card_' + this.enemyDeck.length;
-                        this.enemyDeck.push(card);
-                        cardIndex++;
-                    }
-                }
-                
-                console.log('Created player deck with', this.deck.length, 'cards');
-                console.log('Created enemy deck with', this.enemyDeck.length, 'cards');
-                
-                // Final shuffle for randomness
-                this.shuffleDeck(this.deck);
-                this.shuffleDeck(this.enemyDeck);
-                this.drawStartingHand();
-            },
-            
-            shuffleDeck(deck) {
-                for (let i = deck.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [deck[i], deck[j]] = [deck[j], deck[i]];
-                }
-            },
-            
-            drawStartingHand() {
-                for (let i = 0; i < 7; i++) {
-                    this.drawCard();
-                }
-            },
-            
-            drawCard() {
-                if (this.deck.length > 0) {
-                    const card = this.deck.pop();
-                    this.hand.push(card);
-                    this.updateHand();
-                    this.updateUI();
-                }
-            },
-            
-            // Place starting units
-            placeStartingUnits() {
-                // Place encampments
-                this.placeCard({
-                    type: 'encampment',
-                    owner: 1,
-                    id: 'encampment_1'
-                }, 9, 1);
-                
-                this.placeCard({
-                    type: 'encampment', 
-                    owner: 2,
-                    id: 'encampment_2'
-                }, 0, 6);
-                
-                // Place generals
-                if (this.playerGenerals.length > 0) {
-                    const playerGeneral = {...this.playerGenerals[0]};
-                    playerGeneral.id = 'player_general_1';
-                    playerGeneral.owner = 1;
-                    this.placeCard(playerGeneral, 8, 3);
-                }
-                
-                if (this.enemyGenerals.length > 0) {
-                    const enemyGeneral = {...this.enemyGenerals[0]};
-                    enemyGeneral.id = 'enemy_general_1';
-                    enemyGeneral.owner = 2;
-                    this.placeCard(enemyGeneral, 1, 4);
-                }
-            },
-            
-            // Place card on battlefield
-            placeCard(card, row, col) {
-                const key = `${row},${col}`;
-                this.battlefield[key] = card;
-                this.renderCard(card, row, col);
-            },
-            
-            // Render card on battlefield
-            renderCard(card, row, col) {
-                const grid = document.getElementById('grid');
-                const cardElement = document.createElement('div');
-                cardElement.className = 'battlefield-card';
-                cardElement.id = card.id;
-                cardElement.style.width = (this.cellSize - 4) + 'px';
-                cardElement.style.height = (this.cellSize - 4) + 'px';
-                cardElement.style.left = (col * this.cellSize + 2) + 'px';
-                cardElement.style.top = (row * this.cellSize + 2) + 'px';
-                
-                if (card.owner === 2) {
-                    cardElement.classList.add('enemy');
-                }
-                
-                if (card.type === 'encampment') {
-                    cardElement.innerHTML = '<div class="encampment">⛺</div>';
-                } else {
-                    cardElement.innerHTML = this.createCardHTML(card);
-                }
-                
-                cardElement.onclick = (e) => {
-                    e.stopPropagation();
-                    this.handleCardClick(card);
-                };
-                
-                grid.appendChild(cardElement);
-            },
-            
-            // Create card HTML
-            createCardHTML(card) {
-                if (!card.color) return '';
-                
-                const movementHTML = this.createMovementIndicators(card);
-                
-                return `
-                    <div class="card-content">
-                        <div class="card-banner ${card.color}">
-                            ${card.might ? `
-                                <div class="might-circle">
-                                    ${movementHTML}
-                                    ${card.might}
-                                </div>
-                            ` : ''}
-                            ${card.rations ? `<div class="ration-cost">${card.rations}</div>` : ''}
-                            <div class="card-type">${card.type}</div>
-                        </div>
-                        <div class="card-art">${card.realName}</div>
-                        <div class="card-name">${card.realName}</div>
-                        <div class="card-ability">${card.ability || ''}</div>
-                    </div>
-                `;
-            },
-            
-            // Create movement indicators
-            createMovementIndicators(card) {
-                if (!card.movements) return '';
-                
-                let html = '<div class="movement-indicators">';
-                if (card.movements.up) html += '<div class="movement-arrow up"></div>';
-                if (card.movements.down) html += '<div class="movement-arrow down"></div>';
-                if (card.movements.left) html += '<div class="movement-arrow left"></div>';
-                if (card.movements.right) html += '<div class="movement-arrow right"></div>';
-                if (card.movements.ur) html += '<div class="movement-arrow ur"></div>';
-                if (card.movements.ul) html += '<div class="movement-arrow ul"></div>';
-                if (card.movements.dr) html += '<div class="movement-arrow dr"></div>';
-                if (card.movements.dl) html += '<div class="movement-arrow dl"></div>';
-                html += '</div>';
-                
-                return html;
-            },
-            
-            // Handle cell click
-            handleCellClick(row, col) {
-                const key = `${row},${col}`;
-                
-                if (this.selectedCard) {
-                    this.moveCard(this.selectedCard, row, col);
-                } else if (this.selectedHandCard && this.phase === 'action') {
-                    this.playCardFromHand(this.selectedHandCard, row, col);
-                }
-            },
-            
-            // Handle card click
-            handleCardClick(card) {
-                if (card.owner === this.currentPlayer && card.type !== 'encampment') {
-                    this.selectCard(card);
-                }
-            },
-            
-            // Select card
-            selectCard(card) {
-                document.querySelectorAll('.battlefield-card').forEach(el => {
-                    el.classList.remove('selected');
-                });
-                document.querySelectorAll('.hand-card').forEach(el => {
-                    el.classList.remove('selected');
-                });
-                
-                this.selectedCard = card;
-                this.selectedHandCard = null;
-                
-                const cardElement = document.getElementById(card.id);
-                if (cardElement) {
-                    cardElement.classList.add('selected');
-                }
-                
-                this.showValidMoves(card);
-            },
-            
-            // Show valid moves
-            showValidMoves(card) {
-                document.querySelectorAll('.grid-cell').forEach(cell => {
-                    cell.classList.remove('valid-move', 'enemy-occupied');
-                });
-                
-                if (!card.movements || this.phase !== 'action' || this.actions <= 0) return;
-                
-                let cardPos = null;
-                for (const [key, c] of Object.entries(this.battlefield)) {
-                    if (c.id === card.id) {
-                        const [row, col] = key.split(',').map(Number);
-                        cardPos = { row, col };
-                        break;
-                    }
-                }
-                
-                if (!cardPos) return;
-                
-                const moves = [
-                    { dir: 'up', dr: -1, dc: 0 },
-                    { dir: 'down', dr: 1, dc: 0 },
-                    { dir: 'left', dr: 0, dc: -1 },
-                    { dir: 'right', dr: 0, dc: 1 },
-                    { dir: 'ur', dr: -1, dc: 1 },
-                    { dir: 'ul', dr: -1, dc: -1 },
-                    { dir: 'dr', dr: 1, dc: 1 },
-                    { dir: 'dl', dr: 1, dc: -1 }
-                ];
-                
-                moves.forEach(({ dir, dr, dc }) => {
-                    if (card.movements[dir]) {
-                        const newRow = cardPos.row + dr;
-                        const newCol = cardPos.col + dc;
-                        
-                        if (newRow >= 0 && newRow < this.gridSize.rows && 
-                            newCol >= 0 && newCol < this.gridSize.cols) {
-                            const cell = document.querySelector(`[data-row="${newRow}"][data-col="${newCol}"]`);
-                            const key = `${newRow},${newCol}`;
-                            
-                            if (this.battlefield[key]) {
-                                if (this.battlefield[key].owner !== this.currentPlayer) {
-                                    cell.classList.add('enemy-occupied');
-                                }
-                            } else {
-                                cell.classList.add('valid-move');
-                            }
-                        }
-                    }
-                });
-            },
-            
-            // Move card
-            moveCard(card, toRow, toCol) {
-                if (this.phase !== 'action' || this.actions <= 0) return;
-                
-                let fromKey = null;
-                for (const [key, c] of Object.entries(this.battlefield)) {
-                    if (c.id === card.id) {
-                        fromKey = key;
-                        break;
-                    }
-                }
-                
-                if (!fromKey) return;
-                
-                const [fromRow, fromCol] = fromKey.split(',').map(Number);
-                const toKey = `${toRow},${toCol}`;
-                
-                if (!this.isValidMove(card, fromRow, fromCol, toRow, toCol)) return;
-                
-                if (this.battlefield[toKey]) {
-                    if (this.battlefield[toKey].owner !== this.currentPlayer) {
-                        this.initiateBattle(card, this.battlefield[toKey]);
-                    }
-                    return;
-                }
-                
-                delete this.battlefield[fromKey];
-                this.battlefield[toKey] = card;
-                
-                const cardElement = document.getElementById(card.id);
-                cardElement.style.left = (toCol * this.cellSize + 2) + 'px';
-                cardElement.style.top = (toRow * this.cellSize + 2) + 'px';
-                
-                this.actions--;
-                this.updateUI();
-                this.clearSelection();
-            },
-            
-            // Check if move is valid
-            isValidMove(card, fromRow, fromCol, toRow, toCol) {
-                const dr = toRow - fromRow;
-                const dc = toCol - fromCol;
-                
-                if (Math.abs(dr) > 1 || Math.abs(dc) > 1) return false;
-                
-                if (dr === -1 && dc === 0) return card.movements?.up;
-                if (dr === 1 && dc === 0) return card.movements?.down;
-                if (dr === 0 && dc === -1) return card.movements?.left;
-                if (dr === 0 && dc === 1) return card.movements?.right;
-                if (dr === -1 && dc === 1) return card.movements?.ur;
-                if (dr === -1 && dc === -1) return card.movements?.ul;
-                if (dr === 1 && dc === 1) return card.movements?.dr;
-                if (dr === 1 && dc === -1) return card.movements?.dl;
-                
-                return false;
-            },
-            
-            // Clear selection
-            clearSelection() {
-                this.selectedCard = null;
-                this.selectedHandCard = null;
-                
-                document.querySelectorAll('.battlefield-card').forEach(el => {
-                    el.classList.remove('selected');
-                });
-                document.querySelectorAll('.hand-card').forEach(el => {
-                    el.classList.remove('selected');
-                });
-                document.querySelectorAll('.grid-cell').forEach(cell => {
-                    cell.classList.remove('valid-move', 'enemy-occupied');
-                });
-            },
-            
-            // Battle system
-            battle: {
-                attacker: null,
-                defender: null,
-                pot: 0,
-                
-                init(attacker, defender) {
-                    this.attacker = attacker;
-                    this.defender = defender;
-                    
-                    const attackerWager = Math.ceil(attacker.might / 3);
-                    const defenderWager = Math.max(1, attackerWager - 1);
-                    
-                    if (game.rations < attackerWager) {
-                        alert("Not enough rations to attack!");
-                        return false;
-                    }
-                    
-                    game.rations -= attackerWager;
-                    this.pot = attackerWager + defenderWager;
-                    
-                    this.showModal();
-                    return true;
-                },
-                
-                showModal() {
-                    const modal = document.getElementById('battle-modal');
-                    modal.style.display = 'block';
-                    
-                    document.getElementById('attacker-preview').innerHTML = game.createCardHTML(this.attacker);
-                    document.getElementById('defender-preview').innerHTML = game.createCardHTML(this.defender);
-                    document.getElementById('battle-pot').textContent = this.pot;
-                },
-                
-                hideModal() {
-                    document.getElementById('battle-modal').style.display = 'none';
-                },
-                
-                raise() {
-                    if (game.rations > 0) {
-                        game.rations--;
-                        this.pot++;
-                        document.getElementById('battle-pot').textContent = this.pot;
-                        game.updateUI();
-                        
-                        if (Math.random() > 0.5) {
-                            this.pot++;
-                            document.getElementById('battle-pot').textContent = this.pot;
-                        } else {
-                            this.resolveBattle();
-                        }
-                    }
-                },
-                
-                call() {
-                    this.resolveBattle();
-                },
-                
-                fold() {
-                    this.hideModal();
-                    game.clearSelection();
-                },
-                
-                resolveBattle() {
-                    const attackerMight = this.attacker.might;
-                    const defenderMight = this.defender.might;
-                    
-                    if (attackerMight > defenderMight) {
-                        this.removeCard(this.defender);
-                        game.rations += this.pot;
-                        
-                        if (this.defender.type === 'General') {
-                            alert("Enemy General defeated!");
-                            game.currentEnemyGeneral++;
-                            if (game.currentEnemyGeneral >= game.enemyGenerals.length) {
-                                game.endGame(true);
-                            }
-                        }
-                    } else if (defenderMight > attackerMight) {
-                        this.removeCard(this.attacker);
-                        
-                        if (this.attacker.type === 'General') {
-                            game.currentPlayerGeneral++;
-                            if (game.currentPlayerGeneral >= game.playerGenerals.length) {
-                                game.endGame(false);
-                            }
-                        }
-                    } else {
-                        this.removeCard(this.attacker);
-                        this.removeCard(this.defender);
-                    }
-                    
-                    this.hideModal();
-                    game.updateUI();
-                    game.clearSelection();
-                },
-                
-                removeCard(card) {
-                    for (const [key, c] of Object.entries(game.battlefield)) {
-                        if (c.id === card.id) {
-                            delete game.battlefield[key];
-                            const element = document.getElementById(card.id);
-                            if (element) element.remove();
-                            break;
-                        }
-                    }
-                }
-            },
-            
-            // Initiate battle
-            initiateBattle(attacker, defender) {
-                if (this.battle.init(attacker, defender)) {
-                    this.actions--;
-                    this.updateUI();
-                }
-            },
-            
-            // Update hand display
-            updateHand() {
-                const handDiv = document.getElementById('hand');
-                handDiv.innerHTML = '';
-                
-                this.hand.forEach((card, index) => {
-                    const cardDiv = document.createElement('div');
-                    cardDiv.className = 'hand-card';
-                    cardDiv.innerHTML = this.createCardHTML(card);
-                    cardDiv.onclick = () => this.selectHandCard(card, index);
-                    handDiv.appendChild(cardDiv);
-                });
-                
-                document.getElementById('hand-count').textContent = this.hand.length;
-            },
-            
-            // Select card from hand
-            selectHandCard(card, index) {
-                if (this.phase !== 'action') return;
-                
-                if (card.type === 'Support' && this.actions > 0) {
-                    if (confirm(`Play ${card.realName} for ${card.rations} rations? (Cancel to select for discard)`)) {
-                        if (card.rations && card.rations > this.rations) {
-                            alert("Not enough rations!");
-                            return;
-                        }
-                        this.playSupport(card, index);
-                        return;
-                    }
-                }
-                
-                if (this.actions <= 0 && card.type === 'Soldier') return;
-                
-                if (card.type === 'Soldier' && card.rations && card.rations > this.rations) {
-                    alert("Not enough rations!");
-                    return;
-                }
-                
-                this.clearSelection();
-                this.selectedHandCard = { card, index };
-                
-                document.querySelectorAll('.hand-card')[index].classList.add('selected');
-                
-                if (card.type === 'Soldier') {
-                    this.showValidPlacements();
-                }
-            },
-            
-            // Show discard modal
-            showDiscardModal() {
-                const modal = document.getElementById('discard-modal');
-                const cardsDiv = document.getElementById('discard-cards');
-                
-                cardsDiv.innerHTML = '';
-                
-                this.hand.forEach((card, index) => {
-                    const cardDiv = document.createElement('div');
-                    cardDiv.className = 'discard-card';
-                    cardDiv.innerHTML = this.createCardHTML(card);
-                    cardDiv.onclick = () => {
-                        this.discardCard(index);
-                        this.hideDiscardModal();
-                    };
-                    cardsDiv.appendChild(cardDiv);
-                });
-                
-                modal.style.display = 'block';
-            },
-            
-            hideDiscardModal() {
-                document.getElementById('discard-modal').style.display = 'none';
-            },
-            
-            discardCard(index) {
-                const card = this.hand.splice(index, 1)[0];
-                this.rations++;
-                this.graveyard.push(card);
-                this.updateHand();
-                this.updateUI();
-            },
-            
-            // Show valid placements
-            showValidPlacements() {
-                document.querySelectorAll('.grid-cell').forEach(cell => {
-                    const row = parseInt(cell.dataset.row);
-                    const col = parseInt(cell.dataset.col);
-                    const key = `${row},${col}`;
-                    
-                    if (row >= 7 && !this.battlefield[key]) {
-                        cell.classList.add('valid-move');
-                    }
-                });
-            },
-            
-            // Play card from hand
-            playCardFromHand(handCard, row, col) {
-                const { card, index } = handCard;
-                const key = `${row},${col}`;
-                
-                if (this.battlefield[key]) return;
-                if (row < 7) return;
-                
-                if (card.rations) {
-                    this.rations -= card.rations;
-                }
-                
-                this.hand.splice(index, 1);
-                card.owner = this.currentPlayer;
-                card.id = 'played_' + Date.now();
-                this.placeCard(card, row, col);
-                
-                this.actions--;
-                this.updateHand();
-                this.updateUI();
-                this.clearSelection();
-            },
-            
-            // Play support card
-            playSupport(card, index) {
-                if (card.rations) {
-                    this.rations -= card.rations;
-                }
-                
-                this.hand.splice(index, 1);
-                
-                alert(`Played ${card.realName}: ${card.ability}`);
-                
-                if (card.ability.includes("Draw") && card.ability.includes("card")) {
-                    const match = card.ability.match(/Draw (\d+) card/);
-                    if (match) {
-                        const amount = parseInt(match[1]);
-                        for (let i = 0; i < amount; i++) {
-                            this.drawCard();
-                        }
-                    }
-                }
-                
-                this.actions--;
-                this.updateHand();
-                this.updateUI();
-                this.clearSelection();
-            },
-            
-            // Gain ration action
-            gainRation() {
-                if (this.phase !== 'action' || this.actions <= 0) return;
-                
-                this.rations++;
-                this.actions--;
-                this.updateUI();
-            },
-            
-            // Generation phase
-            generatePhase() {
-                if (this.phase !== 'generation' || this.hasGenerated) return;
-                
-                this.rations++;
-                
-                const encampmentKey = this.findPlayerEncampment();
-                if (encampmentKey) {
-                    const [row, col] = encampmentKey.split(',').map(Number);
-                    const adjacentCards = this.getAdjacentCards(row, col);
-                    adjacentCards.forEach(card => {
-                        if (card.owner === this.currentPlayer) {
-                            this.rations++;
-                        }
-                    });
-                }
-                
-                this.drawCard();
-                
-                this.phase = 'action';
-                this.hasGenerated = true;
-                this.updateUI();
-            },
-            
-            findPlayerEncampment() {
-                for (const [key, card] of Object.entries(this.battlefield)) {
-                    if (card.type === 'encampment' && card.owner === this.currentPlayer) {
-                        return key;
-                    }
-                }
-                return null;
-            },
-            
-            getAdjacentCards(row, col) {
-                const adjacent = [];
-                const positions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-                
-                positions.forEach(([dr, dc]) => {
-                    const key = `${row + dr},${col + dc}`;
-                    if (this.battlefield[key]) {
-                        adjacent.push(this.battlefield[key]);
-                    }
-                });
-                
-                return adjacent;
-            },
-            
-            // End turn
-            endTurn() {
-                if (this.phase === 'action') {
-                    this.phase = 'general-will';
-                    this.generalWillPhase();
-                } else {
-                    this.nextTurn();
-                }
-            },
-            
-            // General's Will Phase
-            generalWillPhase() {
-                let playerGeneral = null;
-                for (const [key, card] of Object.entries(this.battlefield)) {
-                    if (card.type === 'General' && card.owner === this.currentPlayer) {
-                        playerGeneral = card;
-                        break;
-                    }
-                }
-                
-                if (!playerGeneral) {
-                    this.nextTurn();
-                    return;
-                }
-                
-                this.showDice(() => {
-                    const roll = Math.floor(Math.random() * 6) + 1;
-                    let effect = `Roll: ${roll}`;
-                    
-                    if (playerGeneral.ability) {
-                        // Parse ability for roll effects
-                        const abilityText = playerGeneral.ability;
-                        if (abilityText.includes(`${roll} -`) || 
-                            (roll <= 2 && abilityText.includes('1-2')) ||
-                            (roll >= 3 && roll <= 4 && abilityText.includes('3-4')) ||
-                            (roll >= 5 && abilityText.includes('5-6'))) {
-                            effect = `Roll ${roll}: Effect applied!`;
-                        }
-                    }
-                    
-                    alert(effect);
-                    this.nextTurn();
-                });
-            },
-            
-            // Show dice animation
-            showDice(callback) {
-                const diceContainer = document.getElementById('dice-container');
-                const dice = document.getElementById('dice');
-                
-                diceContainer.style.display = 'block';
-                
-                let rolls = 0;
-                const interval = setInterval(() => {
-                    dice.textContent = Math.floor(Math.random() * 6) + 1;
-                    rolls++;
-                    
-                    if (rolls > 10) {
-                        clearInterval(interval);
-                        setTimeout(() => {
-                            diceContainer.style.display = 'none';
-                            callback();
-                        }, 500);
-                    }
-                }, 100);
-            },
-            
-            // Next turn
-            nextTurn() {
-                if (this.currentPlayer === 1) {
-                    this.currentPlayer = 2;
-                    this.aiTurn();
-                } else {
-                    this.currentPlayer = 1;
-                    this.turn++;
-                    this.startTurn();
-                }
-            },
-            
-            // Start turn
-            startTurn() {
-                this.phase = 'generation';
-                this.actions = 3;
-                this.hasGenerated = false;
-                this.updateUI();
-            },
-            
-            // Simple AI
-            aiTurn() {
-                setTimeout(() => {
-                    this.currentPlayer = 1;
-                    this.turn++;
-                    this.startTurn();
-                }, 1000);
-            },
-            
-            // Update UI
-            updateUI() {
-                document.getElementById('rations').textContent = this.rations;
-                document.getElementById('actions').textContent = this.actions;
-                document.getElementById('general-lives').textContent = 3 - this.currentPlayerGeneral;
-                document.getElementById('phase-display').textContent = 
-                    this.phase.charAt(0).toUpperCase() + this.phase.slice(1) + ' Phase';
-                document.getElementById('actions-display').textContent = 
-                    `Turn ${this.turn}: Player ${this.currentPlayer}`;
-                document.getElementById('player-deck').textContent = this.deck.length;
-                document.getElementById('enemy-deck').textContent = this.enemyDeck.length;
-                
-                const generateBtn = document.getElementById('generate-btn');
-                generateBtn.disabled = this.phase !== 'generation' || this.hasGenerated;
-                generateBtn.style.display = this.phase === 'generation' ? 'inline-block' : 'none';
-                
-                document.querySelectorAll('.button:not(.generate):not(.end-turn)').forEach(btn => {
-                    btn.disabled = this.phase !== 'action' || this.actions <= 0;
-                });
-                
-                document.querySelector('.end-turn').disabled = false;
-            },
-            
-            // End game
-            endGame(victory) {
-                const screen = document.getElementById('victory-screen');
-                const text = document.getElementById('victory-text');
-                
-                text.textContent = victory ? 'Victory!' : 'Defeat!';
-                screen.style.display = 'block';
-            }
-        };
-        
-        // Initialize game when page loads
-        window.onload = async () => {
-            await game.init();
-        };
-    </script>
+/* ───────  Populate starting hand  ─────── */
+const hand = document.getElementById('hand');
+for (let i = 0; i < 7; i++) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.textContent = 'Blank';
+  hand.appendChild(card);
+}
+
+/* ───────  Drag-and-drop logic (pointer events)  ─────── */
+let draggedCard = null;
+
+document.addEventListener('pointerdown', e => {
+  if (!e.target.classList.contains('card')) return;
+  draggedCard = e.target;
+  draggedCard.classList.add('dragging');
+  draggedCard.setPointerCapture(e.pointerId);
+});
+
+document.addEventListener('pointermove', e => {
+  if (!draggedCard) return;
+  draggedCard.style.position = 'fixed';
+  draggedCard.style.left = (e.clientX - 40) + 'px';
+  draggedCard.style.top  = (e.clientY - 60) + 'px';
+
+  /* highlight cell under pointer */
+  document.querySelectorAll('.cell.highlight').forEach(c => c.classList.remove('highlight'));
+  const cell = document.elementFromPoint(e.clientX, e.clientY);
+  if (cell?.classList.contains('cell')) cell.classList.add('highlight');
+});
+
+document.addEventListener('pointerup', e => {
+  if (!draggedCard) return;
+  draggedCard.releasePointerCapture(e.pointerId);
+
+  const cell = document.elementFromPoint(e.clientX, e.clientY);
+  const validTarget = cell?.classList.contains('cell') && cell.children.length === 0;
+
+  if (validTarget) {
+    cell.appendChild(draggedCard);
+    draggedCard.style.position = 'absolute';
+    draggedCard.style.left = '4px';
+    draggedCard.style.top  = '4px';
+  } else {
+    hand.appendChild(draggedCard);
+    draggedCard.style.position = 'static';
+  }
+
+  draggedCard.classList.remove('dragging');
+  draggedCard = null;
+  document.querySelectorAll('.cell.highlight').forEach(c => c.classList.remove('highlight'));
+});
+
+/* ───────  CSV loader stub – ready for when you drop baseset1.csv in  ─────── */
+function loadCardsFromCSV(path){
+  Papa.parse(path, {
+    download: true,
+    header: true,
+    complete: results => {
+      console.log('CSV loaded', results.data);
+      // TODO: replace blanks with actual card elements
+    }
+  });
+}
+
+// Example usage (uncomment after you add the CSV):
+// loadCardsFromCSV('baseset1.csv');
+</script>
 </body>
 </html>
