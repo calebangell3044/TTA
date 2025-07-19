@@ -734,92 +734,48 @@
     </div>
     
     <script>
-        // Global card database - will hold ALL 403 cards
-        let cardDatabase = {};
-        
-        /**
-         * Load ALL cards from CSV - no limits, no skipping!
-         */
-        async function loadCardData() {
-            try {
-                if (window.fs && window.fs.readFile) {
-                    const csvText = await window.fs.readFile('baseset1.csv', { encoding: 'utf8' });
-                    const parsed = Papa.parse(csvText, { 
-                        header: true, 
-                        dynamicTyping: true, 
-                        skipEmptyLines: true 
-                    });
-                    
-                    cardDatabase = {}; // reset
-                    let loadedCount = 0;
-                    
-                    // Load EVERY SINGLE CARD - no limits!
-                    parsed.data.forEach(row => {
-                        // Skip only truly empty rows
-                        if (!row.SetNum || !row.RealName) return;
-                        
-                        loadedCount++;
-                        
-                        // Helper to handle numbers
-                        const numOrNull = v => {
-                            const n = parseInt(v, 10);
-                            return Number.isFinite(n) ? n : null;
-                        };
-                        
-                        // Movement booleans
-                        const moves = {
-                            up: row.Up === true || row.Up === 'TRUE',
-                            down: row.Down === true || row.Down === 'TRUE',
-                            left: row.Left === true || row.Left === 'TRUE',
-                            right: row.Right === true || row.Right === 'TRUE',
-                            ur: row.UR === true || row.UR === 'TRUE',
-                            ul: row.UL === true || row.UL === 'TRUE',
-                            dr: row.DR === true || row.DR === 'TRUE',
-                            dl: row.DL === true || row.DL === 'TRUE'
-                        };
-                        
-                        cardDatabase[row.SetNum] = {
-                            name: row.RealName,
-                            realName: row.RealName,
-                            color: (row.Color || 'colorless').toLowerCase(),
-                            type: row.Type,
-                            subtype: row.Subtype || null,
-                            might: numOrNull(row.Might),
-                            rations: numOrNull(row.Rations),
-                            movement: row.Movement || null,
-                            ability: row.Ability || '',
-                            setNum: row.SetNum,
-                            rarity: row.Rarity,
-                            movements: moves
-                        };
-                    });
-                    
-                    console.log(`Successfully loaded ALL ${loadedCount} cards from CSV!`);
-                    
-                    // Verify all cards are loaded
-                    const cardsByType = {};
-                    Object.values(cardDatabase).forEach(card => {
-                        cardsByType[card.type] = (cardsByType[card.type] || 0) + 1;
-                    });
-                    console.log('Cards by type:', cardsByType);
-                    
-                } else {
-                    console.error('Cannot access CSV file');
-                    initializeFallbackCards();
-                }
-            } catch (error) {
-                console.error('Error loading card data:', error);
-                initializeFallbackCards();
-            }
-        }
-        
-        // Minimal fallback if CSV fails
-        function initializeFallbackCards() {
-            cardDatabase = {
-                4: {name:"Kingkiller Vodd",realName:"Kingkiller Vodd",color:"red",type:"General",might:13,rations:5,movements:{up:true,down:true,left:true,right:true,ur:true,ul:true,dr:true,dl:true}},
-                127: {name:"General Azure",realName:"General Azure",color:"blue",type:"General",might:7,rations:3,movements:{up:true,down:true,left:true,right:true,ur:true,ul:true,dr:true,dl:true}}
-            };
-        }
+async function loadCardData () {
+  try {
+    // Adjust the path if your CSV lives in a sub-folder, e.g. './data/baseset1.csv'
+    const response = await fetch('./baseset1.csv', {cache: 'no-cache'});
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const csvText = await response.text();
+
+    const parsed = Papa.parse(csvText, {
+      header: true,
+      dynamicTyping: true,
+      skipEmptyLines: true
+    });
+
+    cardDatabase = {};
+    parsed.data.forEach(row => {
+      if (!row.SetNum || !row.RealName) return;
+
+      const movements = ['up','down','left','right','ur','ul','dr','dl']
+        .reduce((obj, dir) => (obj[dir] = /TRUE/i.test(row[dir]), obj), {});
+
+      cardDatabase[row.SetNum] = {
+        name: row.RealName,
+        realName: row.RealName,
+        color: (row.Color || 'colorless').toLowerCase(),
+        type: row.Type,
+        subtype: row.Subtype || null,
+        might: +row.Might || null,
+        rations: +row.Rations || null,
+        ability: row.Ability || '',
+        setNum: row.SetNum,
+        rarity: row.Rarity,
+        movements
+      };
+    });
+
+    console.log(`Loaded ${Object.keys(cardDatabase).length} cards from CSV`);
+  } catch (err) {
+    console.error('Error loading CSV – falling back to hard-coded cards', err);
+    initializeFallbackCards();
+  }
+}
+</script>
 
         // Game state
         const game = {
