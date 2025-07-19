@@ -92,18 +92,17 @@ header h1{font-size:1rem;font-weight:600}
 
 <section id="hand"></section>
 
-<!-- PapaParse for future CSV import -->
+<!-- PapaParse for CSV import -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 <script>
-/* ─── grid size from rulebook: standard duel is 8 × 10 ─── */
-const boardCols = 8;   // X-axis
-const boardRows = 10;  // Y-axis
+/* ─── grid size ─── */
+const boardCols = 8;
+const boardRows = 10;
 
 /* build board */
 const board = document.getElementById('board');
-board.style.gridTemplateColumns = `repeat(${boardCols}, 1fr)`;
-board.style.gridTemplateRows   = `repeat(${boardRows}, 1fr)`;
-
+board.style.gridTemplateColumns = `repeat(${boardCols},1fr)`;
+board.style.gridTemplateRows   = `repeat(${boardRows},1fr)`;
 for (let r = 0; r < boardRows; r++){
   for (let c = 0; c < boardCols; c++){
     const cell = document.createElement('div');
@@ -114,7 +113,7 @@ for (let r = 0; r < boardRows; r++){
   }
 }
 
-/* starting hand */
+/* hand zone – create seven blanks now, we’ll swap text after CSV loads */
 const hand = document.getElementById('hand');
 for (let i = 0; i < 7; i++){
   const card = document.createElement('div');
@@ -123,28 +122,23 @@ for (let i = 0; i < 7; i++){
   hand.appendChild(card);
 }
 
-/* drag & drop */
+/* drag & drop (unchanged) */
 let dragged = null;
-
 document.addEventListener('pointerdown', e=>{
   if(!e.target.classList.contains('card')) return;
   dragged = e.target;
   dragged.classList.add('dragging');
   dragged.setPointerCapture(e.pointerId);
 });
-
 document.addEventListener('pointermove', e=>{
   if(!dragged) return;
-  dragged.style.position = 'fixed';
-  dragged.style.left = (e.clientX-40)+'px';
-  dragged.style.top  = (e.clientY-60)+'px';
-  document.querySelectorAll('.cell.highlight')
-          .forEach(c=>c.classList.remove('highlight'));
+  dragged.style.position='fixed';
+  dragged.style.left=(e.clientX-40)+'px';
+  dragged.style.top =(e.clientY-60)+'px';
+  document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
   const cell = document.elementFromPoint(e.clientX,e.clientY);
-  if(cell?.classList.contains('cell') && cell.children.length===0)
-      cell.classList.add('highlight');
+  if(cell?.classList.contains('cell') && cell.children.length===0) cell.classList.add('highlight');
 });
-
 document.addEventListener('pointerup', e=>{
   if(!dragged) return;
   dragged.releasePointerCapture(e.pointerId);
@@ -159,23 +153,43 @@ document.addEventListener('pointerup', e=>{
   }
   dragged.classList.remove('dragging');
   dragged=null;
-  document.querySelectorAll('.cell.highlight')
-          .forEach(c=>c.classList.remove('highlight'));
+  document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
 });
 
-/* ─── CSV loader stub ─── */
+/* ─── CSV loader: pick 7 random names for the hand ─── */
 function loadCardsFromCSV(path){
   Papa.parse(path,{
     download:true,
     header:true,
+    skipEmptyLines:true,
     complete:res=>{
-      console.log('CSV ready',res.data);
-      // TODO: replace blanks with real card elements
+      const rows = res.data.filter(r=>Object.keys(r).length);          // ignore blank lines
+      if(rows.length===0){console.warn('CSV loaded but empty');return}
+
+      // Guess the name field: prefer "Name", otherwise first column
+      const headers = Object.keys(rows[0]);
+      const nameKey = headers.find(h=>/name/i.test(h)) || headers[0];
+
+      // choose 7 random rows (no duplicates)
+      const randomRows = [];
+      const pool = [...rows];
+      for(let i=0;i<7 && pool.length;i++){
+        const idx = Math.floor(Math.random()*pool.length);
+        randomRows.push(pool.splice(idx,1)[0]);
+      }
+
+      // replace the hand card labels
+      [...hand.children].forEach((card,i)=>{
+        card.textContent = randomRows[i]?.[nameKey] || 'Unknown';
+      });
+
+      console.log('Sample hand populated with random names from', path);
     }
   });
 }
-// Uncomment once baseset1.csv is in place
-  loadCardsFromCSV('baseset1.csv');
+
+/*  ← uncomment this line once baseset1.csv is in the same folder →  */
+loadCardsFromCSV('baseset1.csv');
 </script>
 </body>
 </html>
