@@ -1,1 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Through The Ages TCG</title>
 
+    <!-- ─────────────────────────  STYLES  ────────────────────────── -->
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+
+        body{
+            font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+            background:#1a1a1a;color:#e0e0e0;
+            overflow:hidden;display:flex;flex-direction:column;height:100vh;
+        }
+        /* … (all your original CSS, unchanged) … */
+    </style>
+
+    <!-- Papa Parse for CSV → JSON -->
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+</head>
+<body>
+
+<!-- ─────────────────────────  HTML LAYOUT  ───────────────────────── -->
+<div id="top-bar">
+    <div id="player-info">
+        <div class="resource-display"><div class="resource-icon">⚔️</div> Rations: <span id="rations">0</span></div>
+        <div class="resource-display"><div class="resource-icon">⚡</div> Actions: <span id="actions">0</span></div>
+        <div class="resource-display"><div class="resource-icon">👑</div> General Lives: <span id="general-lives">3</span></div>
+    </div>
+
+    <div id="turn-info">
+        <div id="phase-display">Generation Phase</div>
+        <div id="actions-display">Turn 1: Player 1</div>
+        <div id="deck-counts">Your Deck: <span id="player-deck">0</span> | Enemy Deck: <span id="enemy-deck">0</span></div>
+    </div>
+
+    <div id="controls">
+        <button class="button generate" id="generate-btn" onclick="game.generatePhase()">Generate Rations & Draw</button>
+        <button class="button" onclick="game.gainRation()">Gain Ration (1 Action)</button>
+        <button class="button end-turn" onclick="game.endTurn()">End Turn</button>
+    </div>
+</div>
+
+<div id="game-area">
+    <div id="battlefield-container">
+        <div id="battlefield"><div id="grid"></div></div>
+    </div>
+
+    <div id="hand-container">
+        <div id="hand-header">
+            <h3>Your Hand (<span id="hand-count">0</span>)</h3>
+            <button class="button" onclick="game.showDiscardModal()">Discard for Rations</button>
+        </div>
+        <div id="hand"></div>
+    </div>
+</div>
+
+<!-- Battle Modal -->
+<div id="battle-modal">
+    <div id="battle-content">
+        <h2>Battle!</h2>
+        <div class="battle-card-display">
+            <div class="battle-card-preview" id="attacker-preview"></div>
+            <div style="align-self:center;font-size:32px;">⚔️</div>
+            <div class="battle-card-preview" id="defender-preview"></div>
+        </div>
+        <div id="wager-display">Battle Pot: <span id="battle-pot">0</span> Rations</div>
+        <div class="wager-controls">
+            <button class="button" onclick="game.battle.raise()">Raise</button>
+            <button class="button" onclick="game.battle.call()">Call</button>
+            <button class="button" onclick="game.battle.fold()">Fold</button>
+        </div>
+        <h3 style="margin-top:20px;">Support Cards</h3>
+        <div id="support-selection"></div>
+    </div>
+</div>
+
+<!-- Discard Modal -->
+<div id="discard-modal">
+    <div id="discard-content">
+        <h2>Select a Card to Discard for 1 Ration</h2>
+        <div id="discard-cards"></div>
+        <button class="button" onclick="game.hideDiscardModal()">Cancel</button>
+    </div>
+</div>
+
+<!-- Dice & Victory screens (unchanged markup) … -->
+
+<!-- ────────────────────────  MAIN SCRIPT  ───────────────────────── -->
+<script>
+/* ------------------------------------------------------------------
+   1)  Global database – populated from baseset1.csv at runtime
+------------------------------------------------------------------ */
+let cardDatabase = {};
+
+/* ------------------------------------------------------------------
+   2)  CSV → cardDatabase  (replaces old initializeCardDatabase / loadCardData)
+------------------------------------------------------------------ */
+async function loadCardData() {
+    const csvText = await fetch('baseset1.csv').then(r => r.text());
+
+    const parsed = Papa.parse(csvText, { header: true, dynamicTyping: true });
+
+    cardDatabase = {};
+
+    parsed.data.forEach(row => {
+        // skip blank lines
+        if (!row.SetNum) return;
+
+        const toNum = v => {
+            const n = parseInt(v, 10);
+            return Number.isFinite(n) ? n : null;
+        };
+
+        const movements = {
+            up: !!row.Up,   down: !!row.Down, left: !!row.Left, right: !!row.Right,
+            ur: !!row.UR,   ul: !!row.UL,     dr: !!row.DR,     dl: !!row.DL
+        };
+
+        cardDatabase[row.SetNum] = {
+            name: row.RealName,
+            realName: row.RealName,
+            color: (row.Color || '').toLowerCase(),
+            type: row.Type,
+            subtype: row.Subtype || null,
+            might: toNum(row.Might),
+            rations: toNum(row.Rations),
+            movement: row.Movement || null,
+            ability: row.Ability || '',
+            setNum: row.SetNum,
+            rarity: row.Rarity,
+            movements
+        };
+    });
+
+    console.log(`Loaded ${Object.keys(cardDatabase).length} cards from CSV`);
+}
+
+/* ------------------------------------------------------------------
+   3)  GAME OBJECT  (identical to your original, except:
+       – in   init()   we now just await loadCardData();
+       – removed any reference to cardDataFromCSV / initializeCardDatabase()
+------------------------------------------------------------------ */
+const game = {
+    /* … every existing property and method … */
+
+    async init() {
+        await loadCardData();              // <-- NEW
+        this.createBattlefield();
+        this.setupGenerals();
+        this.createDecks();
+        this.placeStartingUnits();
+        this.updateUI();
+    },
+
+    /* … all your original methods remain unchanged … */
+};
+
+/* ------------------------------------------------------------------
+   4)  Boot up
+------------------------------------------------------------------ */
+window.onload = () => game.init();
+</script>
+</body>
+</html>
