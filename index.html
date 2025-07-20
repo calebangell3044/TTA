@@ -244,40 +244,36 @@ let allowedColors = new Set();    // updated after pick
 let dragged = null;
 let selectedBoardCard = null;     // card currently selected for movement
 
-/* ──────────────── DRAG‑AND‑DROP (hand <-> board) ──────────────── */
+/* ───────── drag & drop ───────── */
 document.addEventListener('pointerdown', e=>{
   if(!e.target.classList.contains('card')) return;
   dragged = e.target;
   dragged.classList.add('dragging');
+  dragged.style.pointerEvents = 'none';      // ➊ ignore hits while dragging
   dragged.setPointerCapture(e.pointerId);
 });
-document.addEventListener('pointermove', e=>{
-  if(!dragged) return;
-  Object.assign(dragged.style,{
-    position:'fixed',
-    left:(e.clientX-40)+'px',
-    top :(e.clientY-60)+'px'
-  });
-  document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
-  const cell = document.elementFromPoint(e.clientX,e.clientY);
-  if(cell?.classList.contains('cell') && cell.children.length===0) cell.classList.add('highlight');
-});
+
 document.addEventListener('pointerup', e=>{
   if(!dragged) return;
   dragged.releasePointerCapture(e.pointerId);
-  const cell = document.elementFromPoint(e.clientX,e.clientY);
-  const valid = cell?.classList.contains('cell') && cell.children.length===0;
+
+  const cell = document.elementFromPoint(e.clientX, e.clientY);
+  const valid = cell?.classList.contains('cell') && cell.children.length === 0;
+
   if(valid){
     cell.appendChild(dragged);
-    Object.assign(dragged.style,{position:'absolute',left:'4px',top:'4px'});
+    Object.assign(dragged.style, {position:'absolute', left:'4px', top:'4px'});
   }else{
     handEl.appendChild(dragged);
-    dragged.style.position='static';
+    dragged.style.position = 'static';
   }
+
+  dragged.style.pointerEvents = 'auto';      // ➋ restore hits
   dragged.classList.remove('dragging');
   dragged = null;
   document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
 });
+
 
 /* ──────────────── BOARD CARD MOVEMENT (click‑to‑move) ──────────────── */
 boardEl.addEventListener('click', e=>{
