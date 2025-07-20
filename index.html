@@ -177,7 +177,7 @@ header h1{font-size:1rem;font-weight:600}
   <h1>Through the Ages – Prototype</h1>
 
   <div id="deck-hud">
-    <span id="deck-count">Deck – (0 + hand = 50)</span>
+    <span id="deck-count">Deck – 50</span>
     <button id="btn-draw" disabled>Draw Card</button>
   </div>
 </header>
@@ -276,10 +276,8 @@ let selectedBoardCard = null;     // card selected to move
 
 /* ──────────────── HUD update ──────────────── */
 function updateDeckHUD(){
-  const deckLeft = fullDeck.length;
-  const handCnt  = handEl.children.length;
-  deckCountEl.textContent = `Deck – (${deckLeft} + hand = ${handCnt})`;
-  drawBtn.disabled = deckLeft === 0;
+  deckCountEl.textContent = `Deck – ${fullDeck.length}`;
+  drawBtn.disabled = fullDeck.length === 0;
 }
 
 /* ───────── drag & drop ───────── */
