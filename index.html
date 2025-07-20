@@ -13,17 +13,19 @@
   --accent:#8ab4f8;
 }
 html,body{
-  height:100%;
   margin:0;
+  height:100%;
   background:var(--bg);
   color:#e0e0e0;
   font-family:'Segoe UI',Tahoma,Verdana,sans-serif;
   display:flex;
   flex-direction:column;
+  overflow:hidden; /* prevent scrolling */
 }
-/* ─── header reserve ─── */
+
+/* Header */
 header{
-  flex:0 0 60px;
+  flex:0 0 8vh; /* about 8% of screen height */
   display:flex;
   align-items:center;
   padding:0 1rem;
@@ -32,29 +34,31 @@ header{
 }
 header h1{font-size:1rem;font-weight:600}
 
-/* ─── board ─── */
+/* Board */
 #board{
-  flex:1 1 auto;
+  flex:0 0 60vh;  /* 60% of screen height */
   display:grid;
   gap:4px;
   padding:10px;
   background:var(--surface-alt);
+  max-width:90vw;
+  margin:0 auto;
 }
 .cell{
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:4px;
   position:relative;
-  aspect-ratio:1/1;     /* keep every space square */
+  aspect-ratio:1/1; /* keeps each cell square */
 }
 .cell.highlight{
   outline:2px dashed var(--accent);
   outline-offset:-2px;
 }
 
-/* ─── hand ─── */
+/* Hand */
 #hand{
-  flex:0 0 160px;
+  flex:0 0 25vh; /* 25% of screen height */
   display:flex;
   align-items:center;
   justify-content:center;
@@ -62,26 +66,35 @@ header h1{font-size:1rem;font-weight:600}
   padding:0.5rem;
   background:var(--surface);
   border-top:1px solid var(--border);
+  overflow-x:auto;
 }
 .card{
-  width:80px;
-  height:120px;
+  flex:0 0 auto;
+  width:10vw;
+  max-width:80px;
+  height:14vw;
+  max-height:120px;
   background:#444;
   border:2px solid var(--accent);
   border-radius:6px;
   cursor:grab;
   user-select:none;
   display:flex;
+  flex-direction:column;
   align-items:center;
   justify-content:center;
-  font-size:.8rem;
+  font-size:.7rem;
   text-align:center;
-  transition:transform .05s;
+  padding:4px;
 }
 .card.dragging{
   opacity:.7;
   cursor:grabbing;
   transform:rotate(3deg);
+}
+.card small{
+  font-size:0.65rem;
+  color:#ccc;
 }
 </style>
 </head>
