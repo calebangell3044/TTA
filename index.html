@@ -146,6 +146,12 @@ header h1{font-size:1rem;font-weight:600}
 }
 #confirm-generals[disabled]{opacity:.4;cursor:not-allowed;}
 
+.gp-footer{
+  margin-top:auto;
+  display:flex;
+  justify-content:flex-end;
+}
+
   
 </style>
 </head>
@@ -155,12 +161,16 @@ header h1{font-size:1rem;font-weight:600}
 <!-- GENERAL‑PICK MODAL -->
 <div id="general-modal" class="hidden">
   <div class="modal-content">
-    <h2>Select 3 Generals</h2>
-    <p class="help">Click to choose 3 Generals! Click again to un‑select. Confirm when you're ready.</p>
+    <h2 id="gp-heading">Select General 1 of 3</h2>
+
     <div id="general-grid"></div>
-    <button id="confirm-generals" disabled>Confirm</button>
+
+    <div class="gp-footer">
+      <button id="gp-next" disabled>Next →</button>
+    </div>
   </div>
 </div>
+
 
   
 <main id="board-wrapper">
