@@ -360,6 +360,7 @@ function loadCardsFromCSV(path){
     skipEmptyLines:true,
     complete:({data})=>{
       if(!data.length){alert('CSV is empty');return;}
+      data = data.slice(0, 377); // only rows 1-376
 
       /* figure out which headers map to display + real names */
       const headers = Object.keys(data[0]).map(h=>h.trim());
