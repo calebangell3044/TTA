@@ -176,25 +176,17 @@ header h1{font-size:1rem;font-weight:600}
 /* ───────────────────────── CONFIG ───────────────────────── */
 const boardCols = 8, boardRows = 10;
 
-complete:({data})=>{
-  if(!data.length){console.warn('CSV empty');return;}
-
-  /* normalise headers once */
-  const headers = Object.keys(data[0]).map(h=>h.trim());
-
-  /* pick display + real‑name columns case‑insensitively */
-  const displayKey = headers.find(h=>/^name$/i.test(h) && !/^realname$/i.test(h)) || headers[0];
-  const realKey    = headers.find(h=>/^realname$/i.test(h)) || null;
-
-  /* stash ids & keys for later use */
-  data.forEach((row,idx)=>row.__id='id'+idx);
-  csvRows = data;
-  COL.name = displayKey;   // make downstream code use the right keys
-  COL.real = realKey;
-
-  showGeneralPicker();
-}
-
+/* canonical column names – change here if your CSV differs */
+const COL = {
+  type : 'Type',
+  color: 'Color',
+  name : 'Name',       // will be updated after we inspect the header row
+  real : 'RealName',   // idem
+  up   : 'Up',
+  down : 'Down',
+  left : 'Left',
+  right: 'Right'
+};
 
 /* faction ➜ CSS colour */
 const COLOR_HEX = {
@@ -212,7 +204,6 @@ function applyColour(el, colourRaw){
   el.style.borderColor = hex;
   el.style.background  = `linear-gradient(150deg, ${hex}22, ${hex}08)`;
 }
-
 
 /* ──────────────── DOM refs ──────────────── */
 const headerEl = document.querySelector('header');
@@ -287,33 +278,28 @@ document.addEventListener('pointerup', e=>{
   document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
 });
 
-/* ──────────────── BOARD CARD MOVEMENT ──────────────── */
+/* ──────────────── BOARD CARD MOVEMENT (click‑to‑move) ──────────────── */
 boardEl.addEventListener('click', e=>{
   const cardDiv = e.target.closest('.card');
   if(!cardDiv) return;
+  if(cardDiv.parentElement === handEl) return;   // ignore if still in hand
 
-  // STEP 1: if the clicked card is in hand, ignore.
-  if(cardDiv.parentElement === handEl) return;
-
-  // find its CSV row via a data‑id attribute we’ll attach later
   const rowId = cardDiv.dataset.rowid;
   const row   = csvRows.find(r=>r.__id === rowId);
   if(!row) return;
 
-  // STEP 2: if this card is already selected → clear selection
   if(selectedBoardCard === cardDiv){
     clearMoveHighlights();
     selectedBoardCard = null;
     return;
   }
 
-  // STEP 3: new selection
   clearMoveHighlights();
   selectedBoardCard = cardDiv;
 
-  const originCell = cardDiv.parentElement;
-  const r = +originCell.dataset.row;
-  const c = +originCell.dataset.col;
+  const origin = cardDiv.parentElement;
+  const r = +origin.dataset.row;
+  const c = +origin.dataset.col;
 
   const moves = [];
   if(isTrue(row[COL.up])   && r>0)            moves.push({r:r-1, c});
@@ -355,7 +341,14 @@ function loadCardsFromCSV(path){
     header:true,
     skipEmptyLines:true,
     complete:({data})=>{
-      data.forEach((row,idx)=>row.__id='id'+idx); // tag for lookup
+      if(!data.length){alert('CSV is empty');return;}
+
+      /* figure out which headers map to display + real names */
+      const headers = Object.keys(data[0]).map(h=>h.trim());
+      COL.name = headers.find(h=>/^name$/i.test(h) && !/^realname$/i.test(h)) || headers[0];
+      COL.real = headers.find(h=>/^realname$/i.test(h)) || null;
+
+      data.forEach((row,idx)=>row.__id='id'+idx);
       csvRows = data;
       showGeneralPicker();
     }
@@ -367,12 +360,12 @@ function showGeneralPicker(){
   const generals = csvRows.filter(r=> (r[COL.type]||'').toLowerCase()==='general');
 
   generals.forEach(row=>{
-   const div = document.createElement('div');
-    div.className = 'general-card';
-    div.dataset.rowid = row.__id;
-    div.innerHTML = `<strong>${row[COL.name]||'?'}</strong><br><small>${row[COL.real]||''}</small>`;
-    applyColour(div, row[COL.color]);   // ← NEW
-    gridEl.appendChild(div);
+    const card = document.createElement('div');
+    card.className = 'general-card';
+    card.dataset.rowid = row.__id;
+    card.innerHTML = `<strong>${row[COL.name]||'?'}</strong><br><small>${row[COL.real]||''}</small>`;
+    applyColour(card, row[COL.color]);
+    gridEl.appendChild(card);
   });
 
   gridEl.addEventListener('click', e=>{
@@ -380,20 +373,16 @@ function showGeneralPicker(){
     if(!card) return;
     card.classList.toggle('selected');
 
-    // enforce max 3
     const selected = [...gridEl.querySelectorAll('.general-card.selected')];
     if(selected.length > 3){
-      selected[0].classList.remove('selected'); // deselect oldest
+      selected[0].classList.remove('selected'); // keep max 3
     }
     confirmBtn.disabled = selected.length!==3;
   });
 
   confirmBtn.addEventListener('click', ()=>{
     const selected = [...gridEl.querySelectorAll('.general-card.selected')];
-    generalsChosen = selected.map(div=>{
-      const id = div.dataset.rowid;
-      return csvRows.find(r=>r.__id===id);
-    });
+    generalsChosen = selected.map(div => csvRows.find(r=>r.__id === div.dataset.rowid));
     allowedColors = new Set(generalsChosen.map(r=> (r[COL.color]||'').toLowerCase()));
     modalEl.classList.add('hidden');
     dealOpeningHand();
@@ -402,31 +391,37 @@ function showGeneralPicker(){
   modalEl.classList.remove('hidden');
 }
 
-/* ──────────────── DEAL HAND (7 random legal cards) ──────────────── */
+/* ──────────────── DEAL OPENING HAND ──────────────── */
 function dealOpeningHand(){
   const legal = csvRows.filter(r=>{
     const col = (r[COL.color]||'').toLowerCase();
     return allowedColors.has(col) || col==='colorless';
   });
+
   const pool=[...legal], chosen=[];
   for(let i=0;i<7 && pool.length;i++){
     const idx=Math.floor(Math.random()*pool.length);
     chosen.push(pool.splice(idx,1)[0]);
   }
+
   [...handEl.children].forEach((cardDiv,i)=>{
-    const row = chosen[i] || {};
-    cardDiv.dataset.rowid = row.__id || '';
-    cardDiv.innerHTML = row.__id
+    const row = chosen[i];
+    if(row){
+      cardDiv.dataset.rowid = row.__id;
+      cardDiv.innerHTML = `${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`;
       applyColour(cardDiv, row[COL.color]);
-      ? `${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`
-      : 'Unknown';
+    }else{
+      cardDiv.dataset.rowid = '';
+      cardDiv.textContent = 'Unknown';
+      cardDiv.style = ''; // clear any previous tint
+    }
   });
 }
 
 /* ──────────────── UTIL ──────────────── */
 function isTrue(val){return String(val).trim().toLowerCase()==='true' || val=='1';}
 
-/* ──────────────── RESPONSIVE BOARD SIZING (unchanged) ──────────────── */
+/* ──────────────── RESPONSIVE BOARD SIZING ──────────────── */
 function resizeBoard(){
   const headerH = headerEl.offsetHeight;
   const handH   = handEl.offsetHeight;
