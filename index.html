@@ -179,6 +179,7 @@ const boardCols = 8, boardRows = 10;
 /* canonical column names – change here if your CSV differs */
 const COL = {
   type : 'Type',
+  sub  : 'SubType',
   color: 'Color',
   name : 'Name',       // will be updated after we inspect the header row
   real : 'RealName',   // idem
@@ -374,41 +375,73 @@ function loadCardsFromCSV(path){
   });
 }
 
-/* ──────────────── GENERAL PICKER ──────────────── */
+/* ──────────────── GENERAL PICKER (G1 → G2 → G3) ──────────────── */
 function showGeneralPicker(){
-  const generals = csvRows.filter(r=> (r[COL.type]||'').toLowerCase()==='general');
+  const ALL_GENERALS = csvRows.filter(r => (r[COL.type]||'').toLowerCase() === 'general');
+  const STAGES       = ['G1','G2','G3'];           // order matters
+  let stageIndex     = 0;                          // 0 → 2
+  let chosenThisStage = null;                      // row object
 
-  generals.forEach(row=>{
-    const card = document.createElement('div');
-    card.className = 'general-card';
-    card.dataset.rowid = row.__id;
-    card.innerHTML = `<strong>${row[COL.name]||'?'}</strong><br><small>${row[COL.real]||''}</small>`;
-    applyColour(card, row[COL.color]);
-    gridEl.appendChild(card);
-  });
+  const heading   = document.getElementById('gp-heading');
+  const nextBtn   = document.getElementById('gp-next');
 
+  /** refresh grid for current stage */
+  function loadStage(){
+    const targetSubtype = STAGES[stageIndex];
+    heading.textContent = `Select ${targetSubtype} (General ${stageIndex+1} of 3)`;
+    nextBtn.disabled = true;
+    nextBtn.textContent = stageIndex < 2 ? 'Next →' : 'Done';
+
+    gridEl.innerHTML = '';   // clear previous cards
+
+    ALL_GENERALS
+      .filter(r => (r[COL.sub]||'').toUpperCase() === targetSubtype)
+      .forEach(row =>{
+        const card = document.createElement('div');
+        card.className = 'general-card';
+        card.dataset.rowid = row.__id;
+        card.innerHTML = `<strong>${row[COL.name]||'?'}</strong><br><small>${row[COL.real]||''}</small>`;
+        applyColour(card, row[COL.color]);
+        gridEl.appendChild(card);
+      });
+    chosenThisStage = null;
+  }
+
+  /* click on a card */
   gridEl.addEventListener('click', e=>{
     const card = e.target.closest('.general-card');
     if(!card) return;
-    card.classList.toggle('selected');
 
-    const selected = [...gridEl.querySelectorAll('.general-card.selected')];
-    if(selected.length > 3){
-      selected[0].classList.remove('selected'); // keep max 3
+    gridEl.querySelectorAll('.general-card.selected')
+          .forEach(el => el.classList.remove('selected'));
+
+    card.classList.add('selected');
+    chosenThisStage = csvRows.find(r => r.__id === card.dataset.rowid);
+    nextBtn.disabled = false;
+  });
+
+  /* next / done button */
+  nextBtn.addEventListener('click', ()=>{
+    if(!chosenThisStage) return;
+
+    generalsChosen.push(chosenThisStage);
+    allowedColors.add((chosenThisStage[COL.color]||'').toLowerCase());
+
+    if(stageIndex < 2){
+      stageIndex += 1;
+      loadStage();
+    }else{
+      // finished all three
+      modalEl.classList.add('hidden');
+      dealOpeningHand();
     }
-    confirmBtn.disabled = selected.length!==3;
   });
 
-  confirmBtn.addEventListener('click', ()=>{
-    const selected = [...gridEl.querySelectorAll('.general-card.selected')];
-    generalsChosen = selected.map(div => csvRows.find(r=>r.__id === div.dataset.rowid));
-    allowedColors = new Set(generalsChosen.map(r=> (r[COL.color]||'').toLowerCase()));
-    modalEl.classList.add('hidden');
-    dealOpeningHand();
-  });
-
+  // initialise
+  loadStage();
   modalEl.classList.remove('hidden');
 }
+
 
 /* ──────────────── DEAL OPENING HAND ──────────────── */
 function dealOpeningHand(){
