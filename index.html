@@ -208,321 +208,276 @@ header h1{font-size:1rem;font-weight:600}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 <script>
 /* ───────────────────────── CONFIG ───────────────────────── */
-const boardCols = 8, boardRows = 10;
+const boardCols = 8, boardRows = 10;           // fixed 8×10
 
-/* canonical column names – change here if your CSV differs */
+/* canonical column names – change if your CSV differs */
 const COL = {
   type : 'Type',
-  sub  : 'Subtype',         // auto‑detected later if casing differs
+  sub  : 'Subtype',        // auto‑fixed below if header differs
   color: 'Color',
-  name : 'Name',            // will be updated after we inspect header row
-  real : 'RealName',        // idem
+  name : 'Name',
+  real : 'RealName',
   up   : 'Up',
   down : 'Down',
   left : 'Left',
   right: 'Right'
 };
 
-/* faction ➜ hex colour */
+/* faction ➜ colour */
 const COLOR_HEX = {
-  red       : '#d74d4d',
-  blue      : '#3e86ff',
-  green     : '#4f984f',
-  yellow    : '#d7b542',
-  brown     : '#9b6d4b',
-  purple    : '#9b56d4',
-  colorless : '#8a8a8a'
+  red:'#d74d4d', blue:'#3e86ff', green:'#4f984f',
+  yellow:'#d7b542', brown:'#9b6d4b', purple:'#9b56d4',
+  colorless:'#8a8a8a'
 };
-function applyColour(el, colourRaw){
-  const key = String(colourRaw||'').trim().toLowerCase();
-  const hex = COLOR_HEX[key] || '#888';
+function applyColour(el, raw){
+  const hex = COLOR_HEX[String(raw||'').trim().toLowerCase()] || '#888';
   el.style.borderColor = hex;
-  el.style.background  = `linear-gradient(150deg, ${hex}22, ${hex}08)`;
+  el.style.background  = `linear-gradient(150deg,${hex}22,${hex}08)`;
 }
 
 /* ──────────────── DOM refs ──────────────── */
-const headerEl = document.querySelector('header');
 const handEl   = document.getElementById('hand');
-const wrapEl   = document.getElementById('board-wrapper');
 const boardEl  = document.getElementById('board');
+const wrapEl   = document.getElementById('board-wrapper');
+const headerEl = document.querySelector('header');
+
 const modalEl  = document.getElementById('general-modal');
 const gridEl   = document.getElementById('general-grid');
-const nextBtn  = document.getElementById('gp-next');      // modal button
-const headingEl= document.getElementById('gp-heading');   // modal heading
+const nextBtn  = document.getElementById('gp-next');
+const headingEl= document.getElementById('gp-heading');
+
 const deckCountEl = document.getElementById('deck-count');
 const drawBtn  = document.getElementById('btn-draw');
 
-/* expose cols/rows to CSS grid template */
-boardEl.style.setProperty('--cols', boardCols);
-boardEl.style.setProperty('--rows', boardRows);
-
-/* ──────────────── BUILD EMPTY BOARD ──────────────── */
-for (let r = 0; r < boardRows; r++){
-  for (let c = 0; c < boardCols; c++){
-    const cell = document.createElement('div');
-    cell.className = 'cell';
-    cell.dataset.row = r; cell.dataset.col = c;
+/* ──────────────── BUILD COLOURED BOARD ──────────────── */
+for(let r=0;r<boardRows;r++){
+  for(let c=0;c<boardCols;c++){
+    const cell=document.createElement('div');
+    cell.className='cell '+(r<boardRows/2?'opp-half':'ply-half');
+    cell.dataset.row=r; cell.dataset.col=c;
     boardEl.appendChild(cell);
   }
 }
 
+/* ──────────────── CSS for halves (inline) ──────────────── */
+const style=document.createElement('style');
+style.textContent=`
+  .opp-half{background:#2a385a}
+  .ply-half{background:#5a2a2a}
+`;
+document.head.appendChild(style);
+
 /* ──────────────── STATE ──────────────── */
-let csvRows = [];                 // all rows from CSV (trimmed to 376)
-let generalsChosen = [];          // 3 rows
-let allowedColors  = new Set();   // colours allowed in deck
-let fullDeck   = [];              // 50‑card deck (rows)
-let dragged = null;
-let selectedBoardCard = null;     // card selected to move
+let csvRows=[], generalsChosen=[], allowedColors=new Set();
+let gamePhase='setup';       // 'setup' → 'main'
+let dragged=null, selectedBoardCard=null;
+let fullDeck=[],             // 50‑card deck
+    g1Row=null;              // first chosen General row
 
 /* ──────────────── HUD update ──────────────── */
 function updateDeckHUD(){
   deckCountEl.textContent = `Deck – ${fullDeck.length}`;
-  drawBtn.disabled = fullDeck.length === 0;
+  drawBtn.disabled = (gamePhase!=='main' || fullDeck.length===0);
 }
 
-/* ───────── drag & drop ───────── */
-document.addEventListener('pointerdown', e=>{
-  if(!e.target.classList.contains('card')) return;
-  dragged = e.target;
+/* ──────────────── DRAG & DROP ──────────────── */
+document.addEventListener('pointerdown',e=>{
+  if(!e.target.classList.contains('card'))return;
+  dragged=e.target;
   dragged.classList.add('dragging');
-  dragged.setPointerCapture(e.pointerId);       // capture first
-  dragged.style.pointerEvents = 'none';
-  dragged.style.zIndex = '9999';
+  dragged.setPointerCapture(e.pointerId);
+  dragged.style.pointerEvents='none';
+  dragged.style.zIndex='9999';
 });
-
-document.addEventListener('pointermove', e=>{
-  if(!dragged) return;
-  dragged.style.position = 'fixed';
-  dragged.style.left = (e.clientX - 40) + 'px';
-  dragged.style.top  = (e.clientY - 60) + 'px';
-
-  document.querySelectorAll('.cell.highlight')
-          .forEach(c => c.classList.remove('highlight'));
-
-  const cell = document.elementFromPoint(e.clientX, e.clientY);
-  if(cell?.classList.contains('cell') && cell.children.length === 0){
-    cell.classList.add('highlight');
-  }
+document.addEventListener('pointermove',e=>{
+  if(!dragged)return;
+  dragged.style.position='fixed';
+  dragged.style.left=(e.clientX-40)+'px';
+  dragged.style.top =(e.clientY-60)+'px';
 });
-
-document.addEventListener('pointerup', e=>{
-  if(!dragged) return;
+document.addEventListener('pointerup',e=>{
+  if(!dragged)return;
   dragged.releasePointerCapture(e.pointerId);
+  const cell=document.elementFromPoint(e.clientX,e.clientY);
+  const dropOnBoard = cell?.classList.contains('cell') && cell.children.length===0;
+  let allowed=true;
 
-  const cell = document.elementFromPoint(e.clientX, e.clientY);
-  const valid = cell?.classList.contains('cell') && cell.children.length === 0;
+  if(dropOnBoard){
+    const row=+cell.dataset.row;
+    const isPlayerHalf=row>=boardRows/2;
 
-  if(valid){
+    if(gamePhase==='setup'){
+      /* only G1 general & must be player half */
+      allowed = dragged.dataset.rowid===g1Row.__id && isPlayerHalf;
+    }else{
+      /* future restrictions (Soldiers/Arms) can go here */
+    }
+  }else allowed=false;
+
+  if(allowed && dropOnBoard){
     cell.appendChild(dragged);
     Object.assign(dragged.style,{position:'absolute',left:'4px',top:'4px'});
+    // If we just placed the G1 general, finish setup
+    if(gamePhase==='setup'){
+      gamePhase='main';
+      buildDeckAndStart();
+    }
   }else{
     handEl.appendChild(dragged);
-    dragged.style.position = 'static';
+    dragged.style.position='static';
   }
 
-  dragged.style.pointerEvents = 'auto';
-  dragged.style.zIndex = '';
+  dragged.style.pointerEvents='auto';
+  dragged.style.zIndex='';
   dragged.classList.remove('dragging');
-  dragged = null;
-  document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
-
-  updateDeckHUD();                       // hand size changed
+  dragged=null;
+  updateDeckHUD();
 });
 
-/* ──────────────── BOARD CARD MOVEMENT (click‑to‑move) ──────────────── */
-/*   -- unchanged from your version, but updateDeckHUD not needed here  */
-boardEl.addEventListener('click', e=>{
-  const cardDiv = e.target.closest('.card');
-  if(!cardDiv || cardDiv.parentElement === handEl) return;
+/* ──────────────── BOARD CARD MOVEMENT (still allowed in main) ──────────────── */
+boardEl.addEventListener('click',e=>{
+  if(gamePhase!=='main')return;
+  const card=e.target.closest('.card');
+  if(!card||card.parentElement===handEl)return;
+  const rowObj=csvRows.find(r=>r.__id===card.dataset.rowid);
+  if(!rowObj)return;
 
-  const rowId = cardDiv.dataset.rowid;
-  const row   = csvRows.find(r=>r.__id === rowId);
-  if(!row) return;
+  if(selectedBoardCard===card){clearMoveHighlights();selectedBoardCard=null;return;}
+  clearMoveHighlights();selectedBoardCard=card;
 
-  if(selectedBoardCard === cardDiv){
-    clearMoveHighlights();
-    selectedBoardCard = null;
-    return;
-  }
-
-  clearMoveHighlights();
-  selectedBoardCard = cardDiv;
-  const origin = cardDiv.parentElement;
-  const r = +origin.dataset.row, c = +origin.dataset.col;
-
-  const moves = [];
-  if(isTrue(row[COL.up])   && r>0)            moves.push({r:r-1, c});
-  if(isTrue(row[COL.down]) && r<boardRows-1)  moves.push({r:r+1, c});
-  if(isTrue(row[COL.left]) && c>0)            moves.push({r, c:c-1});
-  if(isTrue(row[COL.right])&& c<boardCols-1)  moves.push({r, c:c+1});
+  const r=+card.parentElement.dataset.row, c=+card.parentElement.dataset.col;
+  const moves=[];
+  if(isTrue(rowObj[COL.up])&&r>0)           moves.push({r:r-1,c});
+  if(isTrue(rowObj[COL.down])&&r<boardRows-1)moves.push({r:r+1,c});
+  if(isTrue(rowObj[COL.left])&&c>0)         moves.push({r,c:c-1});
+  if(isTrue(rowObj[COL.right])&&c<boardCols-1)moves.push({r,c:c+1});
 
   moves.forEach(({r,c})=>{
-    const target = boardEl.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
-    if(target && target.children.length===0){
+    const target=boardEl.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+    if(target&&target.children.length===0){
       target.classList.add('move-target');
-      target.addEventListener('click', moveListener);
+      target.addEventListener('click',moveListener);
     }
   });
 });
 function moveListener(e){
-  const dest = e.currentTarget;
+  const dest=e.currentTarget;
   dest.classList.remove('move-target');
-  dest.removeEventListener('click', moveListener);
-
+  dest.removeEventListener('click',moveListener);
   if(selectedBoardCard){
     dest.appendChild(selectedBoardCard);
     Object.assign(selectedBoardCard.style,{position:'absolute',left:'4px',top:'4px'});
   }
-  clearMoveHighlights();
-  selectedBoardCard = null;
+  clearMoveHighlights();selectedBoardCard=null;
 }
 function clearMoveHighlights(){
   boardEl.querySelectorAll('.move-target').forEach(c=>{
-    c.classList.remove('move-target');
-    c.removeEventListener('click', moveListener);
+    c.classList.remove('move-target'); c.removeEventListener('click',moveListener);
   });
 }
 
 /* ──────────────── DRAW BUTTON ──────────────── */
-drawBtn.addEventListener('click', ()=>{
-  if(fullDeck.length === 0) return;
-  const row = fullDeck.shift();
-  const cardDiv = document.createElement('div');
-  cardDiv.className = 'card';
-  cardDiv.dataset.rowid = row.__id;
-  cardDiv.innerHTML = `${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`;
-  applyColour(cardDiv, row[COL.color]);
-  handEl.appendChild(cardDiv);
+drawBtn.addEventListener('click',()=>{
+  if(gamePhase!=='main'||fullDeck.length===0)return;
+  const row=fullDeck.shift();
+  handEl.appendChild(createCardDiv(row));
   updateDeckHUD();
 });
 
 /* ──────────────── CSV LOADER ──────────────── */
 function loadCardsFromCSV(path){
   Papa.parse(path,{
-    download:true,
-    header:true,
-    skipEmptyLines:true,
+    download:true,header:true,skipEmptyLines:true,
     complete:({data})=>{
-      if(!data.length){alert('CSV is empty');return;}
-      data = data.slice(0, 376);
-
-      const headers = Object.keys(data[0]).map(h=>h.trim());
-      COL.name = headers.find(h=>/^name$/i.test(h) && !/^realname$/i.test(h)) || headers[0];
-      COL.real = headers.find(h=>/^realname$/i.test(h)) || null;
-      COL.sub  = headers.find(h=>/^sub[\s_]*type$/i.test(h)) || COL.sub;
-
-      data.forEach((row,idx)=>row.__id='id'+idx);
-      csvRows = data;
+      if(!data.length){alert('CSV empty');return;}
+      data=data.slice(0,376);
+      const hdr=Object.keys(data[0]).map(h=>h.trim());
+      COL.name=hdr.find(h=>/^name$/i.test(h)&&!/^realname$/i.test(h))||hdr[0];
+      COL.real=hdr.find(h=>/^realname$/i.test(h))||null;
+      COL.sub =hdr.find(h=>/^sub[\s_]*type$/i.test(h))||COL.sub;
+      data.forEach((r,i)=>r.__id='id'+i);
+      csvRows=data;
       showGeneralPicker();
     }
   });
 }
 
-/* ──────────────── GENERAL PICKER (G1 → G2 → G3) ──────────────── */
+/* ──────────────── GENERAL PICKER (G1→G2→G3) ──────────────── */
 function showGeneralPicker(){
-  const ALL_GENS = csvRows.filter(r => (r[COL.type]||'').toLowerCase() === 'general');
-  const STAGES   = ['G1','G2','G3'];
-  let idx = 0, chosenRow = null;
+  const ALL=csvRows.filter(r=>(r[COL.type]||'').toLowerCase()==='general');
+  const STAGE=['G1','G2','G3']; let idx=0, pick=null;
 
   function loadStage(){
-    const target = STAGES[idx];
-    headingEl.textContent = `Select ${target} (General ${idx+1} of 3)`;
-    nextBtn.disabled = true;
-    nextBtn.textContent = idx < 2 ? 'Next →' : 'Done';
-    gridEl.innerHTML = '';
-
-    ALL_GENS.filter(r => String(r[COL.sub]||'').trim().toUpperCase() === target)
-            .forEach(row=>{
-               const div = document.createElement('div');
-               div.className='general-card';
-               div.dataset.rowid=row.__id;
-               div.innerHTML = `<strong>${row[COL.name]}</strong><br><small>${row[COL.real]||''}</small>`;
-               applyColour(div, row[COL.color]);
-               gridEl.appendChild(div);
-            });
-    chosenRow = null;
+    const tgt=STAGE[idx];
+    headingEl.textContent=`Select ${tgt} (General ${idx+1} of 3)`;
+    nextBtn.disabled=true; gridEl.innerHTML='';
+    ALL.filter(r=>String(r[COL.sub]||'').trim().toUpperCase()===tgt)
+       .forEach(row=>gridEl.appendChild(createCardDiv(row,'general-card')));
+    pick=null;
   }
 
-  gridEl.addEventListener('click', e=>{
-    const card = e.target.closest('.general-card');
-    if(!card) return;
-    gridEl.querySelectorAll('.general-card.selected')
-          .forEach(el=>el.classList.remove('selected'));
-    card.classList.add('selected');
-    chosenRow = csvRows.find(r=>r.__id===card.dataset.rowid);
-    nextBtn.disabled = false;
+  gridEl.addEventListener('click',e=>{
+    const card=e.target.closest('.general-card'); if(!card)return;
+    gridEl.querySelectorAll('.selected').forEach(el=>el.classList.remove('selected'));
+    card.classList.add('selected'); pick=csvRows.find(r=>r.__id===card.dataset.rowid);
+    nextBtn.disabled=false;
   });
-
-  nextBtn.addEventListener('click', ()=>{
-    if(!chosenRow) return;
-    generalsChosen.push(chosenRow);
-    allowedColors.add((chosenRow[COL.color]||'').toLowerCase());
-
-    if(idx < 2){
-      idx += 1;
-      loadStage();
-    }else{
-      modalEl.classList.add('hidden');
-      buildDeckAndStart();
-    }
+  nextBtn.addEventListener('click',()=>{
+    if(!pick)return;
+    generalsChosen.push(pick);
+    allowedColors.add((pick[COL.color]||'').toLowerCase());
+    if(idx<2){idx++;loadStage();}else{modalEl.classList.add('hidden');beginSetup();}
   });
-
-  loadStage();
-  modalEl.classList.remove('hidden');
+  loadStage(); modalEl.classList.remove('hidden');
 }
 
-/* ──────────────── BUILD 50‑CARD DECK & DEAL HAND ──────────────── */
-function buildDeckAndStart(){
-  const legal = csvRows.filter(r=>{
-    const col = (r[COL.color]||'').toLowerCase();
-    return allowedColors.has(col) || col === 'colorless';
-  });
-
-  if(legal.length < 50) alert('Warning: fewer than 50 legal cards – duplicates will occur');
-
-  // shuffle copy, then slice
-  fullDeck = [...legal].sort(()=>Math.random()-0.5);
-  while(fullDeck.length < 50) fullDeck.push(...fullDeck);
-  fullDeck = fullDeck.slice(0,50);
-
-  handEl.innerHTML = '';          // clear placeholders
-  dealOpeningHand();              // pops first 7
+/* ──────────────── SETUP PHASE ──────────────── */
+function beginSetup(){
+  gamePhase='setup';
+  g1Row = generalsChosen[0];
+  handEl.innerHTML='';                      // only G1 in hand
+  handEl.appendChild(createCardDiv(g1Row));
   updateDeckHUD();
 }
 
-/* ──────────────── DEAL OPENING HAND (pops from fullDeck) ──────────────── */
-function dealOpeningHand(){
-  for(let i=0;i<7;i++){
-    const row = fullDeck.shift();
-    if(!row) break;
-    const cardDiv = document.createElement('div');
-    cardDiv.className='card';
-    cardDiv.dataset.rowid=row.__id;
-    cardDiv.innerHTML=`${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`;
-    applyColour(cardDiv, row[COL.color]);
-    handEl.appendChild(cardDiv);
-  }
+/* ──────────────── BUILD DECK & DEAL HAND (enter MAIN) ──────────────── */
+function buildDeckAndStart(){
+  // build 50‑card deck
+  const legal=csvRows.filter(r=>{
+    const col=(r[COL.color]||'').toLowerCase();
+    return allowedColors.has(col)||col==='colorless';
+  });
+  fullDeck=[...legal].sort(()=>Math.random()-0.5);
+  while(fullDeck.length<50)fullDeck.push(...fullDeck);
+  fullDeck=fullDeck.slice(0,50);
+
+  // deal 7‑card hand
+  handEl.innerHTML='';
+  for(let i=0;i<7;i++)handEl.appendChild(createCardDiv(fullDeck.shift()));
+  updateDeckHUD();
+}
+
+/* ──────────────── CARD DIV FACTORY ──────────────── */
+function createCardDiv(row, extraClass='card'){
+  const d=document.createElement('div'); d.className=extraClass;
+  d.dataset.rowid=row.__id;
+  d.innerHTML=`${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`;
+  applyColour(d,row[COL.color]);
+  return d;
 }
 
 /* ──────────────── UTIL ──────────────── */
-function isTrue(val){return String(val).trim().toLowerCase()==='true' || val=='1';}
+function isTrue(v){return String(v).trim().toLowerCase()==='true'||v=='1';}
 
 /* ──────────────── RESPONSIVE BOARD SIZING ──────────────── */
 function resizeBoard(){
-  const headerH = headerEl.offsetHeight;
-  const handH   = handEl.offsetHeight;
-  const vh      = window.innerHeight;
-  const padY = 20;
-  const availH = vh - headerH - handH - padY;
-  const gap = 4;
-  const maxCellH = (availH - (boardRows-1)*gap) / boardRows;
-  const vw = wrapEl.clientWidth;
-  const maxCellW = (vw - (boardCols-1)*gap) / boardCols;
-  document.documentElement.style.setProperty('--cell-size',
-    Math.floor(Math.min(maxCellH, maxCellW))+'px');
+  const head=headerEl.offsetHeight,hand=handEl.offsetHeight;
+  const vh=innerHeight,pad=20,gap=4;
+  const maxH=(vh-head-hand-pad-(boardRows-1)*gap)/boardRows;
+  const maxW=(wrapEl.clientWidth-(boardCols-1)*gap)/boardCols;
+  document.documentElement.style.setProperty('--cell-size',Math.floor(Math.min(maxH,maxW))+'px');
 }
-window.addEventListener('resize', resizeBoard);
-window.addEventListener('orientationchange', resizeBoard);
+addEventListener('resize',resizeBoard); addEventListener('orientationchange',resizeBoard);
 
 /* ──────────────── INIT ──────────────── */
 resizeBoard();
