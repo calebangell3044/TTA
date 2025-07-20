@@ -274,6 +274,7 @@ function updateDeckHUD(){
 document.addEventListener('pointerdown',e=>{
   const el=e.target.closest('.card, .encamp');
   if(!el) return;
+  if (gamePhase === 'main' && el.dataset.kind === 'g1') return;
   if(el.classList.contains('stationary')) return;      // encamp after setup
   if(el.classList.contains('encamp') && gamePhase!=='setup') return;
 
