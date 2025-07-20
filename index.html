@@ -208,22 +208,13 @@ header h1{font-size:1rem;font-weight:600}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 <script>
 /* ───────────────────────── CONFIG ───────────────────────── */
-const boardCols = 8, boardRows = 10;           // fixed 8×10
+const boardCols = 8, boardRows = 10;
 
-/* canonical column names – change if your CSV differs */
-const COL = {
-  type : 'Type',
-  sub  : 'Subtype',        // auto‑fixed below if header differs
-  color: 'Color',
-  name : 'Name',
-  real : 'RealName',
-  up   : 'Up',
-  down : 'Down',
-  left : 'Left',
-  right: 'Right'
-};
+/* column keys (auto‑fixed later if casing differs) */
+const COL = { type:'Type', sub:'Subtype', color:'Color', name:'Name', real:'RealName',
+              up:'Up', down:'Down', left:'Left', right:'Right' };
 
-/* faction ➜ colour */
+/* colour palette */
 const COLOR_HEX = {
   red:'#d74d4d', blue:'#3e86ff', green:'#4f984f',
   yellow:'#d7b542', brown:'#9b6d4b', purple:'#9b56d4',
@@ -247,9 +238,9 @@ const nextBtn  = document.getElementById('gp-next');
 const headingEl= document.getElementById('gp-heading');
 
 const deckCountEl = document.getElementById('deck-count');
-const drawBtn  = document.getElementById('btn-draw');
+const drawBtn     = document.getElementById('btn-draw');
 
-/* ──────────────── BUILD COLOURED BOARD ──────────────── */
+/* ──────────────── BUILD BOARD WITH COLOURED HALVES ──────────────── */
 for(let r=0;r<boardRows;r++){
   for(let c=0;c<boardCols;c++){
     const cell=document.createElement('div');
@@ -258,71 +249,78 @@ for(let r=0;r<boardRows;r++){
     boardEl.appendChild(cell);
   }
 }
-
-/* ──────────────── CSS for halves (inline) ──────────────── */
-const style=document.createElement('style');
-style.textContent=`
-  .opp-half{background:#2a385a}
-  .ply-half{background:#5a2a2a}
-`;
-document.head.appendChild(style);
+/* simple colours for halves */
+const css=document.createElement('style');
+css.textContent=`.opp-half{background:#2a385a}.ply-half{background:#5a2a2a}`;
+document.head.appendChild(css);
 
 /* ──────────────── STATE ──────────────── */
-let csvRows=[], generalsChosen=[], allowedColors=new Set();
-let gamePhase='setup';       // 'setup' → 'main'
+let csvRows=[];
+let generalsChosen=[], allowedColors=new Set();
+let gamePhase='setup';           // 'setup' → 'main'
+let fullDeck=[];                 // 50‑card deck
+let g1Row=null;                  // row obj of G1 General
+let encampPlaced=false, g1Placed=false;
+
 let dragged=null, selectedBoardCard=null;
-let fullDeck=[],             // 50‑card deck
-    g1Row=null;              // first chosen General row
 
 /* ──────────────── HUD update ──────────────── */
 function updateDeckHUD(){
-  deckCountEl.textContent = `Deck – ${fullDeck.length}`;
-  drawBtn.disabled = (gamePhase!=='main' || fullDeck.length===0);
+  deckCountEl.textContent=`Deck – ${fullDeck.length}`;
+  drawBtn.disabled=(gamePhase!=='main'||fullDeck.length===0);
 }
 
 /* ──────────────── DRAG & DROP ──────────────── */
 document.addEventListener('pointerdown',e=>{
-  if(!e.target.classList.contains('card'))return;
-  dragged=e.target;
+  const el=e.target.closest('.card, .encamp');
+  if(!el) return;
+  if(el.classList.contains('stationary')) return;      // encamp after setup
+  if(el.classList.contains('encamp') && gamePhase!=='setup') return;
+
+  dragged=el;
   dragged.classList.add('dragging');
   dragged.setPointerCapture(e.pointerId);
   dragged.style.pointerEvents='none';
   dragged.style.zIndex='9999';
 });
 document.addEventListener('pointermove',e=>{
-  if(!dragged)return;
+  if(!dragged) return;
   dragged.style.position='fixed';
   dragged.style.left=(e.clientX-40)+'px';
   dragged.style.top =(e.clientY-60)+'px';
 });
 document.addEventListener('pointerup',e=>{
-  if(!dragged)return;
+  if(!dragged) return;
   dragged.releasePointerCapture(e.pointerId);
   const cell=document.elementFromPoint(e.clientX,e.clientY);
-  const dropOnBoard = cell?.classList.contains('cell') && cell.children.length===0;
-  let allowed=true;
+  const onBoard=cell?.classList.contains('cell') && cell.children.length===0;
+  let legalDrop=false;
 
-  if(dropOnBoard){
-    const row=+cell.dataset.row;
-    const isPlayerHalf=row>=boardRows/2;
+  if(onBoard){
+    const row=+cell.dataset.row, isPlayerHalf=row>=boardRows/2;
 
     if(gamePhase==='setup'){
-      /* only G1 general & must be player half */
-      allowed = dragged.dataset.rowid===g1Row.__id && isPlayerHalf;
-    }else{
-      /* future restrictions (Soldiers/Arms) can go here */
+      if(dragged.dataset.kind==='g1' && isPlayerHalf){legalDrop=true; g1Placed=true;}
+      if(dragged.dataset.kind==='encamp' && isPlayerHalf){legalDrop=true; encampPlaced=true;}
+      if(legalDrop){
+        cell.appendChild(dragged);
+        Object.assign(dragged.style,{position:'absolute',left:'4px',top:'4px'});
+        dragged.classList.add('stationary');         // stop future drags
+      }
+      if(g1Placed && encampPlaced){   // finish setup
+        gamePhase='main';
+        buildDeckAndStart();
+      }
+    }else{  // main phase – regular cards already handled earlier
+      if(dragged.classList.contains('card') && !dragged.classList.contains('encamp')){
+        legalDrop=true;
+        cell.appendChild(dragged);
+        Object.assign(dragged.style,{position:'absolute',left:'4px',top:'4px'});
+      }
     }
-  }else allowed=false;
+  }
 
-  if(allowed && dropOnBoard){
-    cell.appendChild(dragged);
-    Object.assign(dragged.style,{position:'absolute',left:'4px',top:'4px'});
-    // If we just placed the G1 general, finish setup
-    if(gamePhase==='setup'){
-      gamePhase='main';
-      buildDeckAndStart();
-    }
-  }else{
+  if(!legalDrop){        // snap back to hand
     handEl.appendChild(dragged);
     dragged.style.position='static';
   }
@@ -334,29 +332,28 @@ document.addEventListener('pointerup',e=>{
   updateDeckHUD();
 });
 
-/* ──────────────── BOARD CARD MOVEMENT (still allowed in main) ──────────────── */
+/* ──────────────── BOARD CARD MOVEMENT (only MAIN phase) ──────────────── */
 boardEl.addEventListener('click',e=>{
-  if(gamePhase!=='main')return;
+  if(gamePhase!=='main') return;
   const card=e.target.closest('.card');
-  if(!card||card.parentElement===handEl)return;
+  if(!card || card.parentElement===handEl || card.classList.contains('encamp')) return;
+
   const rowObj=csvRows.find(r=>r.__id===card.dataset.rowid);
-  if(!rowObj)return;
+  if(!rowObj) return;
 
   if(selectedBoardCard===card){clearMoveHighlights();selectedBoardCard=null;return;}
-  clearMoveHighlights();selectedBoardCard=card;
-
+  clearMoveHighlights(); selectedBoardCard=card;
   const r=+card.parentElement.dataset.row, c=+card.parentElement.dataset.col;
   const moves=[];
-  if(isTrue(rowObj[COL.up])&&r>0)           moves.push({r:r-1,c});
-  if(isTrue(rowObj[COL.down])&&r<boardRows-1)moves.push({r:r+1,c});
-  if(isTrue(rowObj[COL.left])&&c>0)         moves.push({r,c:c-1});
-  if(isTrue(rowObj[COL.right])&&c<boardCols-1)moves.push({r,c:c+1});
+  if(isTrue(rowObj[COL.up])   && r>0)            moves.push({r:r-1,c});
+  if(isTrue(rowObj[COL.down]) && r<boardRows-1)  moves.push({r:r+1,c});
+  if(isTrue(rowObj[COL.left]) && c>0)            moves.push({r,c:c-1});
+  if(isTrue(rowObj[COL.right])&& c<boardCols-1)  moves.push({r,c:c+1});
 
   moves.forEach(({r,c})=>{
-    const target=boardEl.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
-    if(target&&target.children.length===0){
-      target.classList.add('move-target');
-      target.addEventListener('click',moveListener);
+    const t=boardEl.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+    if(t&&t.children.length===0){
+      t.classList.add('move-target'); t.addEventListener('click',moveListener);
     }
   });
 });
@@ -368,7 +365,7 @@ function moveListener(e){
     dest.appendChild(selectedBoardCard);
     Object.assign(selectedBoardCard.style,{position:'absolute',left:'4px',top:'4px'});
   }
-  clearMoveHighlights();selectedBoardCard=null;
+  clearMoveHighlights(); selectedBoardCard=null;
 }
 function clearMoveHighlights(){
   boardEl.querySelectorAll('.move-target').forEach(c=>{
@@ -378,18 +375,16 @@ function clearMoveHighlights(){
 
 /* ──────────────── DRAW BUTTON ──────────────── */
 drawBtn.addEventListener('click',()=>{
-  if(gamePhase!=='main'||fullDeck.length===0)return;
-  const row=fullDeck.shift();
-  handEl.appendChild(createCardDiv(row));
+  if(gamePhase!=='main'||fullDeck.length===0) return;
+  handEl.appendChild(createCardDiv(fullDeck.shift()));
   updateDeckHUD();
 });
 
 /* ──────────────── CSV LOADER ──────────────── */
 function loadCardsFromCSV(path){
   Papa.parse(path,{
-    download:true,header:true,skipEmptyLines:true,
+    download:true, header:true, skipEmptyLines:true,
     complete:({data})=>{
-      if(!data.length){alert('CSV empty');return;}
       data=data.slice(0,376);
       const hdr=Object.keys(data[0]).map(h=>h.trim());
       COL.name=hdr.find(h=>/^name$/i.test(h)&&!/^realname$/i.test(h))||hdr[0];
@@ -405,13 +400,12 @@ function loadCardsFromCSV(path){
 /* ──────────────── GENERAL PICKER (G1→G2→G3) ──────────────── */
 function showGeneralPicker(){
   const ALL=csvRows.filter(r=>(r[COL.type]||'').toLowerCase()==='general');
-  const STAGE=['G1','G2','G3']; let idx=0, pick=null;
+  const ST=['G1','G2','G3']; let idx=0, pick=null;
 
   function loadStage(){
-    const tgt=STAGE[idx];
-    headingEl.textContent=`Select ${tgt} (General ${idx+1} of 3)`;
+    headingEl.textContent=`Select ${ST[idx]} (General ${idx+1} of 3)`;
     nextBtn.disabled=true; gridEl.innerHTML='';
-    ALL.filter(r=>String(r[COL.sub]||'').trim().toUpperCase()===tgt)
+    ALL.filter(r=>String(r[COL.sub]||'').trim().toUpperCase()===ST[idx])
        .forEach(row=>gridEl.appendChild(createCardDiv(row,'general-card')));
     pick=null;
   }
@@ -419,8 +413,8 @@ function showGeneralPicker(){
   gridEl.addEventListener('click',e=>{
     const card=e.target.closest('.general-card'); if(!card)return;
     gridEl.querySelectorAll('.selected').forEach(el=>el.classList.remove('selected'));
-    card.classList.add('selected'); pick=csvRows.find(r=>r.__id===card.dataset.rowid);
-    nextBtn.disabled=false;
+    card.classList.add('selected');
+    pick=csvRows.find(r=>r.__id===card.dataset.rowid); nextBtn.disabled=false;
   });
   nextBtn.addEventListener('click',()=>{
     if(!pick)return;
@@ -428,52 +422,61 @@ function showGeneralPicker(){
     allowedColors.add((pick[COL.color]||'').toLowerCase());
     if(idx<2){idx++;loadStage();}else{modalEl.classList.add('hidden');beginSetup();}
   });
+
   loadStage(); modalEl.classList.remove('hidden');
 }
 
 /* ──────────────── SETUP PHASE ──────────────── */
 function beginSetup(){
-  gamePhase='setup';
-  g1Row = generalsChosen[0];
-  handEl.innerHTML='';                      // only G1 in hand
-  handEl.appendChild(createCardDiv(g1Row));
+  gamePhase='setup'; g1Row=generalsChosen[0];
+  handEl.innerHTML='';
+  handEl.appendChild(createCardDiv(g1Row,'card','g1'));
+
+  // create encampment token
+  const enc=document.createElement('div');
+  enc.className='encamp';
+  enc.dataset.kind='encamp';
+  enc.textContent='Encampment';
+  Object.assign(enc.style,{
+    width:'80px',height:'80px',background:'#666',border:'3px solid #aaa',
+    borderRadius:'6px',display:'flex',alignItems:'center',justifyContent:'center',
+    fontSize:'.75rem',color:'#fff',cursor:'grab',userSelect:'none'
+  });
+  handEl.appendChild(enc);
+
   updateDeckHUD();
 }
 
 /* ──────────────── BUILD DECK & DEAL HAND (enter MAIN) ──────────────── */
 function buildDeckAndStart(){
-  // build 50‑card deck
   const legal=csvRows.filter(r=>{
     const col=(r[COL.color]||'').toLowerCase();
     return allowedColors.has(col)||col==='colorless';
   });
   fullDeck=[...legal].sort(()=>Math.random()-0.5);
-  while(fullDeck.length<50)fullDeck.push(...fullDeck);
+  while(fullDeck.length<50) fullDeck.push(...fullDeck);
   fullDeck=fullDeck.slice(0,50);
 
-  // deal 7‑card hand
-  handEl.innerHTML='';
-  for(let i=0;i<7;i++)handEl.appendChild(createCardDiv(fullDeck.shift()));
+  handEl.innerHTML=''; for(let i=0;i<7;i++) handEl.appendChild(createCardDiv(fullDeck.shift()));
   updateDeckHUD();
 }
 
 /* ──────────────── CARD DIV FACTORY ──────────────── */
-function createCardDiv(row, extraClass='card'){
-  const d=document.createElement('div'); d.className=extraClass;
-  d.dataset.rowid=row.__id;
-  d.innerHTML=`${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`;
-  applyColour(d,row[COL.color]);
-  return d;
+function createCardDiv(row, cls='card', kind='card'){
+  const d=document.createElement('div'); d.className=cls;
+  d.dataset.rowid=row.__id; d.dataset.kind=kind;
+  d.innerHTML=`${row[COL.name]}<br><small>${row[COL.real]||''}</small>`;
+  applyColour(d,row[COL.color]); return d;
 }
 
 /* ──────────────── UTIL ──────────────── */
 function isTrue(v){return String(v).trim().toLowerCase()==='true'||v=='1';}
 
-/* ──────────────── RESPONSIVE BOARD SIZING ──────────────── */
+/* ──────────────── RESPONSIVE SIZING ──────────────── */
 function resizeBoard(){
-  const head=headerEl.offsetHeight,hand=handEl.offsetHeight;
-  const vh=innerHeight,pad=20,gap=4;
-  const maxH=(vh-head-hand-pad-(boardRows-1)*gap)/boardRows;
+  const gap=4,pad=20;
+  const h=innerHeight-headerEl.offsetHeight-handEl.offsetHeight-pad;
+  const maxH=(h-(boardRows-1)*gap)/boardRows;
   const maxW=(wrapEl.clientWidth-(boardCols-1)*gap)/boardCols;
   document.documentElement.style.setProperty('--cell-size',Math.floor(Math.min(maxH,maxW))+'px');
 }
