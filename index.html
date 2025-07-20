@@ -254,6 +254,25 @@ document.addEventListener('pointerdown', e=>{
   dragged.style.zIndex = '9999'; //keeps it on top
 });
 
+document.addEventListener('pointermove', e=>{
+  if(!dragged) return;
+
+  // keep card under the pointer
+  dragged.style.position = 'fixed';
+  dragged.style.left = (e.clientX - 40) + 'px';   // 40 = half card width
+  dragged.style.top  = (e.clientY - 60) + 'px';   // 60 = half card height
+
+  // (optional) show potential drop cell
+  document.querySelectorAll('.cell.highlight')
+          .forEach(c => c.classList.remove('highlight'));
+
+  const cell = document.elementFromPoint(e.clientX, e.clientY);
+  if(cell?.classList.contains('cell') && cell.children.length === 0){
+    cell.classList.add('highlight');
+  }
+});
+
+
 document.addEventListener('pointerup', e=>{
   if(!dragged) return;
   dragged.releasePointerCapture(e.pointerId);
