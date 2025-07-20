@@ -188,16 +188,17 @@ const COL = {
   right: 'Right'
 };
 
-/* faction ➜ CSS colour */
+/* faction ➜ hex colour */
 const COLOR_HEX = {
-  red       : '#d55',
-  blue      : '#56aaff',
-  green     : '#5c8a42',
-  yellow    : '#e0c04c',
-  white     : '#ddd',
-  black     : '#444',
-  colorless : '#888'
+  red       : '#d74d4d',
+  blue      : '#3e86ff',
+  green     : '#4f984f',
+  yellow    : '#d7b542',
+  brown     : '#9b6d4b',
+  purple    : '#9b56d4',
+  colorless : '#8a8a8a'
 };
+
 function applyColour(el, colourRaw){
   const key = String(colourRaw||'').trim().toLowerCase();
   const hex = COLOR_HEX[key] || '#888';
