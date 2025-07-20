@@ -101,11 +101,68 @@ header h1{font-size:1rem;font-weight:600}
   cursor:grabbing;
   transform:rotate(3deg);
 }
+
+/* ——— modal ——— */
+#general-modal{
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.85);
+  backdrop-filter:blur(2px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:1000;
+}
+#general-modal.hidden{display:none;}
+.modal-content{
+  background:var(--surface);
+  border:1px solid var(--border);
+  padding:1.5rem;
+  max-width:min(90vw,900px);
+  max-height:min(90vh,720px);
+  overflow:auto;
+  border-radius:8px;
+  box-shadow:0 0 10px #000;
+  display:flex;
+  flex-direction:column;
+  gap:1rem;
+}
+#general-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  gap:0.5rem;
+}
+.general-card{
+  background:#444;
+  border:2px solid transparent;
+  border-radius:6px;
+  padding:0.5rem;
+  cursor:pointer;
+  text-align:center;
+  font-size:.8rem;
+  user-select:none;
+}
+.general-card.selected{
+  border-color:var(--accent);
+}
+#confirm-generals[disabled]{opacity:.4;cursor:not-allowed;}
+
+  
 </style>
 </head>
 <body>
 <header><h1>Through the Ages – Prototype</h1></header>
 
+<!-- GENERAL‑PICK MODAL -->
+<div id="general-modal" class="hidden">
+  <div class="modal-content">
+    <h2>Select 3 Generals</h2>
+    <p class="help">Click to choose. Click again to un‑select. Confirm when you have exactly 3.</p>
+    <div id="general-grid"></div>
+    <button id="confirm-generals" disabled>Confirm</button>
+  </div>
+</div>
+
+  
 <main id="board-wrapper">
   <div id="board"></div>
 </main>
@@ -116,20 +173,35 @@ header h1{font-size:1rem;font-weight:600}
 <!-- PapaParse for CSV import -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 <script>
-/* grid size */
+/* ───────────────────────── CONFIG ───────────────────────── */
 const boardCols = 8, boardRows = 10;
 
-/* DOM refs */
+/* Column headers (edit if your CSV differs) */
+const COL = {
+  type : 'Type',
+  color: 'Color',
+  name : 'Name',
+  real : 'RealName',
+  up   : 'Up',
+  down : 'Down',
+  left : 'Left',
+  right: 'Right'
+};
+
+/* ──────────────── DOM refs ──────────────── */
 const headerEl = document.querySelector('header');
 const handEl   = document.getElementById('hand');
 const wrapEl   = document.getElementById('board-wrapper');
 const boardEl  = document.getElementById('board');
+const modalEl  = document.getElementById('general-modal');
+const gridEl   = document.getElementById('general-grid');
+const confirmBtn = document.getElementById('confirm-generals');
 
-/* expose cols/rows as CSS custom props (used in grid templates) */
+/* expose cols/rows to CSS grid template */
 boardEl.style.setProperty('--cols', boardCols);
 boardEl.style.setProperty('--rows', boardRows);
 
-/* build board cells */
+/* ──────────────── BUILD EMPTY BOARD ──────────────── */
 for (let r = 0; r < boardRows; r++){
   for (let c = 0; c < boardCols; c++){
     const cell = document.createElement('div');
@@ -139,7 +211,7 @@ for (let r = 0; r < boardRows; r++){
   }
 }
 
-/* build 7 placeholder cards in hand */
+/* ──────────────── HAND PLACEHOLDERS ──────────────── */
 for (let i = 0; i < 7; i++){
   const card = document.createElement('div');
   card.className = 'card';
@@ -147,8 +219,14 @@ for (let i = 0; i < 7; i++){
   handEl.appendChild(card);
 }
 
-/* drag & drop */
+/* ──────────────── STATE ──────────────── */
+let csvRows = [];                 // all cards
+let generalsChosen = [];          // 3 rows
+let allowedColors = new Set();    // updated after pick
 let dragged = null;
+let selectedBoardCard = null;     // card currently selected for movement
+
+/* ──────────────── DRAG‑AND‑DROP (hand <-> board) ──────────────── */
 document.addEventListener('pointerdown', e=>{
   if(!e.target.classList.contains('card')) return;
   dragged = e.target;
@@ -183,73 +261,161 @@ document.addEventListener('pointerup', e=>{
   document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
 });
 
-/* CSV loader: random 7 cards, show Name(top) + RealName(bottom) */
+/* ──────────────── BOARD CARD MOVEMENT ──────────────── */
+boardEl.addEventListener('click', e=>{
+  const cardDiv = e.target.closest('.card');
+  if(!cardDiv) return;
+
+  // STEP 1: if the clicked card is in hand, ignore.
+  if(cardDiv.parentElement === handEl) return;
+
+  // find its CSV row via a data‑id attribute we’ll attach later
+  const rowId = cardDiv.dataset.rowid;
+  const row   = csvRows.find(r=>r.__id === rowId);
+  if(!row) return;
+
+  // STEP 2: if this card is already selected → clear selection
+  if(selectedBoardCard === cardDiv){
+    clearMoveHighlights();
+    selectedBoardCard = null;
+    return;
+  }
+
+  // STEP 3: new selection
+  clearMoveHighlights();
+  selectedBoardCard = cardDiv;
+
+  const originCell = cardDiv.parentElement;
+  const r = +originCell.dataset.row;
+  const c = +originCell.dataset.col;
+
+  const moves = [];
+  if(isTrue(row[COL.up])   && r>0)            moves.push({r:r-1, c});
+  if(isTrue(row[COL.down]) && r<boardRows-1)  moves.push({r:r+1, c});
+  if(isTrue(row[COL.left]) && c>0)            moves.push({r, c:c-1});
+  if(isTrue(row[COL.right])&& c<boardCols-1)  moves.push({r, c:c+1});
+
+  moves.forEach(({r,c})=>{
+    const target = boardEl.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+    if(target && target.children.length===0){
+      target.classList.add('move-target');
+      target.addEventListener('click', moveListener);
+    }
+  });
+});
+function moveListener(e){
+  const dest = e.currentTarget;
+  dest.classList.remove('move-target');
+  dest.removeEventListener('click', moveListener);
+
+  if(selectedBoardCard){
+    dest.appendChild(selectedBoardCard);
+    Object.assign(selectedBoardCard.style,{position:'absolute',left:'4px',top:'4px'});
+  }
+  clearMoveHighlights();
+  selectedBoardCard = null;
+}
+function clearMoveHighlights(){
+  boardEl.querySelectorAll('.move-target').forEach(c=>{
+    c.classList.remove('move-target');
+    c.removeEventListener('click', moveListener);
+  });
+}
+
+/* ──────────────── CSV LOADER ──────────────── */
 function loadCardsFromCSV(path){
   Papa.parse(path,{
     download:true,
     header:true,
     skipEmptyLines:true,
     complete:({data})=>{
-      if(!data.length){console.warn('CSV is empty');return;}
-      const headers = Object.keys(data[0]);
-
-      /* explicit detection per your latest note */
-      const displayKey = headers.find(h => /^name$/i.test(h)) ||
-                         headers.find(h => /^cardname$/i.test(h)) ||
-                         headers[0];
-      const realKey    = headers.find(h => /^realname$/i.test(h)); // exact RealName
-
-      /* pick 7 unique random rows */
-      const pool=[...data], chosen=[];
-      for(let i=0;i<7 && pool.length;i++){
-        const idx=Math.floor(Math.random()*pool.length);
-        chosen.push(pool.splice(idx,1)[0]);
-      }
-
-      /* populate hand */
-      [...handEl.children].forEach((card,i)=>{
-        const row = chosen[i] || {};
-        const disp = row[displayKey] || 'Unknown';
-        const real = realKey ? row[realKey] || '' : '';
-        card.innerHTML = real
-          ? `${disp}<br><small>${real}</small>`
-          : disp;
-      });
-
-      console.log('Hand populated:', {displayKey, realKey});
+      data.forEach((row,idx)=>row.__id='id'+idx); // tag for lookup
+      csvRows = data;
+      showGeneralPicker();
     }
   });
 }
 
-/* responsive board sizing */
+/* ──────────────── GENERAL PICKER ──────────────── */
+function showGeneralPicker(){
+  const generals = csvRows.filter(r=> (r[COL.type]||'').toLowerCase()==='general');
+
+  generals.forEach(row=>{
+    const div = document.createElement('div');
+    div.className = 'general-card';
+    div.dataset.rowid = row.__id;
+    div.innerHTML = `<strong>${row[COL.name]||'?'}</strong><br><small>${row[COL.real]||''}</small>`;
+    gridEl.appendChild(div);
+  });
+
+  gridEl.addEventListener('click', e=>{
+    const card = e.target.closest('.general-card');
+    if(!card) return;
+    card.classList.toggle('selected');
+
+    // enforce max 3
+    const selected = [...gridEl.querySelectorAll('.general-card.selected')];
+    if(selected.length > 3){
+      selected[0].classList.remove('selected'); // deselect oldest
+    }
+    confirmBtn.disabled = selected.length!==3;
+  });
+
+  confirmBtn.addEventListener('click', ()=>{
+    const selected = [...gridEl.querySelectorAll('.general-card.selected')];
+    generalsChosen = selected.map(div=>{
+      const id = div.dataset.rowid;
+      return csvRows.find(r=>r.__id===id);
+    });
+    allowedColors = new Set(generalsChosen.map(r=> (r[COL.color]||'').toLowerCase()));
+    modalEl.classList.add('hidden');
+    dealOpeningHand();
+  });
+
+  modalEl.classList.remove('hidden');
+}
+
+/* ──────────────── DEAL HAND (7 random legal cards) ──────────────── */
+function dealOpeningHand(){
+  const legal = csvRows.filter(r=>{
+    const col = (r[COL.color]||'').toLowerCase();
+    return allowedColors.has(col) || col==='colorless';
+  });
+  const pool=[...legal], chosen=[];
+  for(let i=0;i<7 && pool.length;i++){
+    const idx=Math.floor(Math.random()*pool.length);
+    chosen.push(pool.splice(idx,1)[0]);
+  }
+  [...handEl.children].forEach((cardDiv,i)=>{
+    const row = chosen[i] || {};
+    cardDiv.dataset.rowid = row.__id || '';
+    cardDiv.innerHTML = row.__id
+      ? `${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`
+      : 'Unknown';
+  });
+}
+
+/* ──────────────── UTIL ──────────────── */
+function isTrue(val){return String(val).trim().toLowerCase()==='true' || val=='1';}
+
+/* ──────────────── RESPONSIVE BOARD SIZING (unchanged) ──────────────── */
 function resizeBoard(){
-  // available vertical space in wrapper
   const headerH = headerEl.offsetHeight;
   const handH   = handEl.offsetHeight;
   const vh      = window.innerHeight;
-
-  // subtract header + hand + wrapper padding (20px top/bottom)
-  const padY = 20; // matches #board-wrapper padding:10px top + bottom
+  const padY = 20;
   const availH = vh - headerH - handH - padY;
-
-  // each row needs a cell + gap (4px). last row has no extra gap after it,
-  // but safe to approximate rows*cell + (rows-1)*gap => rows*cell + gapsTotal
   const gap = 4;
   const maxCellH = (availH - (boardRows-1)*gap) / boardRows;
-
-  // width constraint
   const vw = wrapEl.clientWidth;
   const maxCellW = (vw - (boardCols-1)*gap) / boardCols;
-
-  // choose the smaller to ensure fit
   const cellSize = Math.floor(Math.min(maxCellH, maxCellW));
-
   document.documentElement.style.setProperty('--cell-size', cellSize+'px');
 }
 window.addEventListener('resize', resizeBoard);
 window.addEventListener('orientationchange', resizeBoard);
 
-/* init */
+/* ──────────────── INIT ──────────────── */
 resizeBoard();
 loadCardsFromCSV('baseset1.csv');
 </script>
