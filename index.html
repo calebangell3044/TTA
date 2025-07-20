@@ -11,21 +11,22 @@
   --surface-alt:#333;
   --border:#555;
   --accent:#8ab4f8;
+  --cell-size:40px; /* default; JS will override */
 }
+
 html,body{
-  margin:0;
   height:100%;
+  margin:0;
   background:var(--bg);
   color:#e0e0e0;
   font-family:'Segoe UI',Tahoma,Verdana,sans-serif;
   display:flex;
   flex-direction:column;
-  overflow:hidden; /* prevent scrolling */
 }
 
-/* Header */
+/* header unchanged */
 header{
-  flex:0 0 8vh; /* about 8% of screen height */
+  flex:0 0 60px;
   display:flex;
   align-items:center;
   padding:0 1rem;
@@ -34,31 +35,42 @@ header{
 }
 header h1{font-size:1rem;font-weight:600}
 
-/* Board */
-#board{
-  flex:0 0 60vh;  /* 60% of screen height */
-  display:grid;
-  gap:4px;
+/* NEW wrapper: takes remaining vertical space and centers board */
+#board-wrapper{
+  flex:1 1 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   padding:10px;
   background:var(--surface-alt);
-  max-width:90vw;
-  margin:0 auto;
+  overflow:hidden; /* prevent scrollbars */
 }
+
+/* board is sized by --cell-size */
+#board{
+  display:grid;
+  gap:4px;
+  /* columns / rows set in JS */
+  grid-template-columns:repeat(var(--cols,8),var(--cell-size));
+  grid-template-rows:repeat(var(--rows,10),var(--cell-size));
+}
+
 .cell{
+  width:var(--cell-size);
+  height:var(--cell-size);
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:4px;
   position:relative;
-  aspect-ratio:1/1; /* keeps each cell square */
 }
 .cell.highlight{
   outline:2px dashed var(--accent);
   outline-offset:-2px;
 }
 
-/* Hand */
+/* hand unchanged */
 #hand{
-  flex:0 0 25vh; /* 25% of screen height */
+  flex:0 0 160px;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -66,14 +78,10 @@ header h1{font-size:1rem;font-weight:600}
   padding:0.5rem;
   background:var(--surface);
   border-top:1px solid var(--border);
-  overflow-x:auto;
 }
 .card{
-  flex:0 0 auto;
-  width:10vw;
-  max-width:80px;
-  height:14vw;
-  max-height:120px;
+  width:80px;
+  height:120px;
   background:#444;
   border:2px solid var(--accent);
   border-radius:6px;
@@ -83,57 +91,63 @@ header h1{font-size:1rem;font-weight:600}
   flex-direction:column;
   align-items:center;
   justify-content:center;
-  font-size:.7rem;
+  font-size:.8rem;
   text-align:center;
-  padding:4px;
+  transition:transform .05s;
 }
+.card small{font-size:.65rem;color:#ccc;line-height:1.1}
 .card.dragging{
   opacity:.7;
   cursor:grabbing;
   transform:rotate(3deg);
-}
-.card small{
-  font-size:0.65rem;
-  color:#ccc;
 }
 </style>
 </head>
 <body>
 <header><h1>Through the Ages – Prototype</h1></header>
 
-<main id="board"></main>
+<main id="board-wrapper">
+  <div id="board"></div>
+</main>
+
 
 <section id="hand"></section>
 
 <!-- PapaParse for CSV import -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 <script>
-/* ─── grid size ─── */
+/* grid size */
 const boardCols = 8, boardRows = 10;
 
-/* build board */
-const board = document.getElementById('board');
-board.style.gridTemplateColumns = `repeat(${boardCols},1fr)`;
-board.style.gridTemplateRows   = `repeat(${boardRows},1fr)`;
+/* DOM refs */
+const headerEl = document.querySelector('header');
+const handEl   = document.getElementById('hand');
+const wrapEl   = document.getElementById('board-wrapper');
+const boardEl  = document.getElementById('board');
+
+/* expose cols/rows as CSS custom props (used in grid templates) */
+boardEl.style.setProperty('--cols', boardCols);
+boardEl.style.setProperty('--rows', boardRows);
+
+/* build board cells */
 for (let r = 0; r < boardRows; r++){
   for (let c = 0; c < boardCols; c++){
     const cell = document.createElement('div');
     cell.className = 'cell';
     cell.dataset.row = r; cell.dataset.col = c;
-    board.appendChild(cell);
+    boardEl.appendChild(cell);
   }
 }
 
-/* hand zone – create seven placeholders */
-const hand = document.getElementById('hand');
+/* build 7 placeholder cards in hand */
 for (let i = 0; i < 7; i++){
   const card = document.createElement('div');
   card.className = 'card';
   card.textContent = 'Blank';
-  hand.appendChild(card);
+  handEl.appendChild(card);
 }
 
-/* drag & drop (unchanged) */
+/* drag & drop */
 let dragged = null;
 document.addEventListener('pointerdown', e=>{
   if(!e.target.classList.contains('card')) return;
@@ -161,7 +175,7 @@ document.addEventListener('pointerup', e=>{
     cell.appendChild(dragged);
     Object.assign(dragged.style,{position:'absolute',left:'4px',top:'4px'});
   }else{
-    hand.appendChild(dragged);
+    handEl.appendChild(dragged);
     dragged.style.position='static';
   }
   dragged.classList.remove('dragging');
@@ -169,7 +183,7 @@ document.addEventListener('pointerup', e=>{
   document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
 });
 
-/* ─── CSV loader: random 7 cards, show Name + Real Name ─── */
+/* CSV loader: random 7 cards, show Name(top) + RealName(bottom) */
 function loadCardsFromCSV(path){
   Papa.parse(path,{
     download:true,
@@ -177,12 +191,13 @@ function loadCardsFromCSV(path){
     skipEmptyLines:true,
     complete:({data})=>{
       if(!data.length){console.warn('CSV is empty');return;}
-
       const headers = Object.keys(data[0]);
 
-      /* detect columns */
-      const displayKey = headers.find(h=>/^name$/i.test(h)) || headers[0];
-      const realKey    = headers.find(h=>/real[\s_]*name/i.test(h)); // may be undefined
+      /* explicit detection per your latest note */
+      const displayKey = headers.find(h => /^name$/i.test(h)) ||
+                         headers.find(h => /^cardname$/i.test(h)) ||
+                         headers[0];
+      const realKey    = headers.find(h => /^realname$/i.test(h)); // exact RealName
 
       /* pick 7 unique random rows */
       const pool=[...data], chosen=[];
@@ -192,7 +207,7 @@ function loadCardsFromCSV(path){
       }
 
       /* populate hand */
-      [...hand.children].forEach((card,i)=>{
+      [...handEl.children].forEach((card,i)=>{
         const row = chosen[i] || {};
         const disp = row[displayKey] || 'Unknown';
         const real = realKey ? row[realKey] || '' : '';
@@ -201,12 +216,41 @@ function loadCardsFromCSV(path){
           : disp;
       });
 
-      console.log('Hand populated using', displayKey, realKey || '(no real-name column)');
+      console.log('Hand populated:', {displayKey, realKey});
     }
   });
 }
 
-/* load the CSV */
+/* responsive board sizing */
+function resizeBoard(){
+  // available vertical space in wrapper
+  const headerH = headerEl.offsetHeight;
+  const handH   = handEl.offsetHeight;
+  const vh      = window.innerHeight;
+
+  // subtract header + hand + wrapper padding (20px top/bottom)
+  const padY = 20; // matches #board-wrapper padding:10px top + bottom
+  const availH = vh - headerH - handH - padY;
+
+  // each row needs a cell + gap (4px). last row has no extra gap after it,
+  // but safe to approximate rows*cell + (rows-1)*gap => rows*cell + gapsTotal
+  const gap = 4;
+  const maxCellH = (availH - (boardRows-1)*gap) / boardRows;
+
+  // width constraint
+  const vw = wrapEl.clientWidth;
+  const maxCellW = (vw - (boardCols-1)*gap) / boardCols;
+
+  // choose the smaller to ensure fit
+  const cellSize = Math.floor(Math.min(maxCellH, maxCellW));
+
+  document.documentElement.style.setProperty('--cell-size', cellSize+'px');
+}
+window.addEventListener('resize', resizeBoard);
+window.addEventListener('orientationchange', resizeBoard);
+
+/* init */
+resizeBoard();
 loadCardsFromCSV('baseset1.csv');
 </script>
 </body>
