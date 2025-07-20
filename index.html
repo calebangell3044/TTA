@@ -156,7 +156,7 @@ header h1{font-size:1rem;font-weight:600}
 <div id="general-modal" class="hidden">
   <div class="modal-content">
     <h2>Select 3 Generals</h2>
-    <p class="help">Click to choose. Click again to un‑select. Confirm when you have exactly 3.</p>
+    <p class="help">Click to choose 3 Generals! Click again to un‑select. Confirm when you're ready.</p>
     <div id="general-grid"></div>
     <button id="confirm-generals" disabled>Confirm</button>
   </div>
@@ -176,17 +176,43 @@ header h1{font-size:1rem;font-weight:600}
 /* ───────────────────────── CONFIG ───────────────────────── */
 const boardCols = 8, boardRows = 10;
 
-/* Column headers (edit if your CSV differs) */
-const COL = {
-  type : 'Type',
-  color: 'Color',
-  name : 'Name',
-  real : 'RealName',
-  up   : 'Up',
-  down : 'Down',
-  left : 'Left',
-  right: 'Right'
+complete:({data})=>{
+  if(!data.length){console.warn('CSV empty');return;}
+
+  /* normalise headers once */
+  const headers = Object.keys(data[0]).map(h=>h.trim());
+
+  /* pick display + real‑name columns case‑insensitively */
+  const displayKey = headers.find(h=>/^name$/i.test(h) && !/^realname$/i.test(h)) || headers[0];
+  const realKey    = headers.find(h=>/^realname$/i.test(h)) || null;
+
+  /* stash ids & keys for later use */
+  data.forEach((row,idx)=>row.__id='id'+idx);
+  csvRows = data;
+  COL.name = displayKey;   // make downstream code use the right keys
+  COL.real = realKey;
+
+  showGeneralPicker();
+}
+
+
+/* faction ➜ CSS colour */
+const COLOR_HEX = {
+  red       : '#d55',
+  blue      : '#56aaff',
+  green     : '#5c8a42',
+  yellow    : '#e0c04c',
+  white     : '#ddd',
+  black     : '#444',
+  colorless : '#888'
 };
+function applyColour(el, colourRaw){
+  const key = String(colourRaw||'').trim().toLowerCase();
+  const hex = COLOR_HEX[key] || '#888';
+  el.style.borderColor = hex;
+  el.style.background  = `linear-gradient(150deg, ${hex}22, ${hex}08)`;
+}
+
 
 /* ──────────────── DOM refs ──────────────── */
 const headerEl = document.querySelector('header');
@@ -341,10 +367,11 @@ function showGeneralPicker(){
   const generals = csvRows.filter(r=> (r[COL.type]||'').toLowerCase()==='general');
 
   generals.forEach(row=>{
-    const div = document.createElement('div');
+   const div = document.createElement('div');
     div.className = 'general-card';
     div.dataset.rowid = row.__id;
     div.innerHTML = `<strong>${row[COL.name]||'?'}</strong><br><small>${row[COL.real]||''}</small>`;
+    applyColour(div, row[COL.color]);   // ← NEW
     gridEl.appendChild(div);
   });
 
@@ -390,6 +417,7 @@ function dealOpeningHand(){
     const row = chosen[i] || {};
     cardDiv.dataset.rowid = row.__id || '';
     cardDiv.innerHTML = row.__id
+      applyColour(cardDiv, row[COL.color]);
       ? `${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`
       : 'Unknown';
   });
