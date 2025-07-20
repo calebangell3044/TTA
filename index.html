@@ -249,8 +249,9 @@ document.addEventListener('pointerdown', e=>{
   if(!e.target.classList.contains('card')) return;
   dragged = e.target;
   dragged.classList.add('dragging');
-  dragged.style.pointerEvents = 'none';      // ➊ ignore hits while dragging
-  dragged.setPointerCapture(e.pointerId);
+  dragged.setPointerCapture(e.pointerId); // establish capture first
+  dragged.style.pointerEvents = 'none';  // then turns off hit test
+  dragged.style.zIndex = '9999'; //keeps it on top
 });
 
 document.addEventListener('pointerup', e=>{
@@ -269,6 +270,7 @@ document.addEventListener('pointerup', e=>{
   }
 
   dragged.style.pointerEvents = 'auto';      // ➋ restore hits
+  dragged.style.zIndex = ''; // resets stacking
   dragged.classList.remove('dragging');
   dragged = null;
   document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
