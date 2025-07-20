@@ -271,25 +271,28 @@ function updateDeckHUD(){
 }
 
 /* ──────────────── DRAG & DROP ──────────────── */
-document.addEventListener('pointerdown',e=>{
-  const el=e.target.closest('.card, .encamp');
-  if(!el) return;
-  if (gamePhase === 'main' && el.dataset.kind === 'g1') return;
-  if(el.classList.contains('stationary')) return;      // encamp after setup
-  if(el.classList.contains('encamp') && gamePhase!=='setup') return;
+document.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.card, .encamp');
+  if (!el) return;
 
-  dragged=el;
+  /* --- NEW GUARDS ------------------------------------ */
+  // never drag the stationary encampment (after setup)
+  if (el.classList.contains('stationary')) return;
+
+  // don't drag G1 after setup; allow only in setup
+  if (el.dataset.kind === 'g1' && gamePhase !== 'setup') return;
+
+  // any other piece already on the board moves by click, not drag
+  if (el.parentElement !== handEl && gamePhase !== 'setup') return;
+  /* ---------------------------------------------------- */
+
+  dragged = el;
   dragged.classList.add('dragging');
   dragged.setPointerCapture(e.pointerId);
-  dragged.style.pointerEvents='none';
-  dragged.style.zIndex='9999';
+  dragged.style.pointerEvents = 'none';
+  dragged.style.zIndex = '9999';
 });
-document.addEventListener('pointermove',e=>{
-  if(!dragged) return;
-  dragged.style.position='fixed';
-  dragged.style.left=(e.clientX-40)+'px';
-  dragged.style.top =(e.clientY-60)+'px';
-});
+
 document.addEventListener('pointerup',e=>{
   if(!dragged) return;
   dragged.releasePointerCapture(e.pointerId);
@@ -345,18 +348,33 @@ boardEl.addEventListener('click',e=>{
   if(selectedBoardCard===card){clearMoveHighlights();selectedBoardCard=null;return;}
   clearMoveHighlights(); selectedBoardCard=card;
   const r=+card.parentElement.dataset.row, c=+card.parentElement.dataset.col;
-  const moves=[];
-  if(isTrue(rowObj[COL.up])   && r>0)            moves.push({r:r-1,c});
-  if(isTrue(rowObj[COL.down]) && r<boardRows-1)  moves.push({r:r+1,c});
-  if(isTrue(rowObj[COL.left]) && c>0)            moves.push({r,c:c-1});
-  if(isTrue(rowObj[COL.right])&& c<boardCols-1)  moves.push({r,c:c+1});
+  const moves = [];
+  const dirs = [
+  {flag:COL.up,    dr:-1, dc: 0},
+  {flag:COL.down,  dr: 1, dc: 0},
+  {flag:COL.left,  dr: 0, dc:-1},
+  {flag:COL.right, dr: 0, dc: 1},
+  {flag:'UR',      dr:-1, dc: 1},
+  {flag:'UL',      dr:-1, dc:-1},
+  {flag:'DR',      dr: 1, dc: 1},
+  {flag:'DL',      dr: 1, dc:-1},
+];
 
-  moves.forEach(({r,c})=>{
-    const t=boardEl.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
-    if(t&&t.children.length===0){
-      t.classList.add('move-target'); t.addEventListener('click',moveListener);
-    }
-  });
+const isGeneral = (rowObj[COL.type] || '').toLowerCase() === 'general';
+
+dirs.forEach(({flag, dr, dc}) => {
+  const allowed = isGeneral || isTrue(rowObj[flag]);   // Generals ignore flags
+  const nr = r + dr, nc = c + dc;
+  if (allowed && nr >= 0 && nr < boardRows && nc >= 0 && nc < boardCols) {
+    const target = boardEl.querySelector(`.cell[data-row='${nr}'][data-col='${nc}']`);
+    if (target && target.children.length === 0) moves.push(target);
+  }
+});
+
+/* highlight & attach listeners */
+moves.forEach(t => {
+  t.classList.add('move-target');
+  t.addEventListener('click', moveListener);
 });
 function moveListener(e){
   const dest=e.currentTarget;
