@@ -152,11 +152,35 @@ header h1{font-size:1rem;font-weight:600}
   justify-content:flex-end;
 }
 
+#deck-hud{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:1rem;
+}
+#btn-draw{
+  padding:.3rem .8rem;
+  background:var(--accent);
+  color:#000;
+  border:none;
+  border-radius:4px;
+  cursor:pointer;
+  font-weight:600;
+}
+#btn-draw:disabled{opacity:.4;cursor:not-allowed;}
+
   
 </style>
 </head>
 <body>
-<header><h1>Through the Ages – Prototype</h1></header>
+<header>
+  <h1>Through the Ages – Prototype</h1>
+
+  <div id="deck-hud">
+    <span id="deck-count">Deck – (0 + hand = 50)</span>
+    <button id="btn-draw" disabled>Draw Card</button>
+  </div>
+</header>
 
 <!-- GENERAL‑PICK MODAL -->
 <div id="general-modal" class="hidden">
@@ -189,10 +213,10 @@ const boardCols = 8, boardRows = 10;
 /* canonical column names – change here if your CSV differs */
 const COL = {
   type : 'Type',
-  sub  : 'Subtype',
+  sub  : 'Subtype',         // auto‑detected later if casing differs
   color: 'Color',
-  name : 'Name',       // will be updated after we inspect the header row
-  real : 'RealName',   // idem
+  name : 'Name',            // will be updated after we inspect header row
+  real : 'RealName',        // idem
   up   : 'Up',
   down : 'Down',
   left : 'Left',
@@ -209,7 +233,6 @@ const COLOR_HEX = {
   purple    : '#9b56d4',
   colorless : '#8a8a8a'
 };
-
 function applyColour(el, colourRaw){
   const key = String(colourRaw||'').trim().toLowerCase();
   const hex = COLOR_HEX[key] || '#888';
@@ -224,7 +247,10 @@ const wrapEl   = document.getElementById('board-wrapper');
 const boardEl  = document.getElementById('board');
 const modalEl  = document.getElementById('general-modal');
 const gridEl   = document.getElementById('general-grid');
-const confirmBtn = document.getElementById('confirm-generals');
+const nextBtn  = document.getElementById('gp-next');      // modal button
+const headingEl= document.getElementById('gp-heading');   // modal heading
+const deckCountEl = document.getElementById('deck-count');
+const drawBtn  = document.getElementById('btn-draw');
 
 /* expose cols/rows to CSS grid template */
 boardEl.style.setProperty('--cols', boardCols);
@@ -240,40 +266,38 @@ for (let r = 0; r < boardRows; r++){
   }
 }
 
-/* ──────────────── HAND PLACEHOLDERS ──────────────── */
-for (let i = 0; i < 7; i++){
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.textContent = 'Blank';
-  handEl.appendChild(card);
-}
-
 /* ──────────────── STATE ──────────────── */
-let csvRows = [];                 // all cards
+let csvRows = [];                 // all rows from CSV (trimmed to 376)
 let generalsChosen = [];          // 3 rows
-let allowedColors = new Set();    // updated after pick
+let allowedColors  = new Set();   // colours allowed in deck
+let fullDeck   = [];              // 50‑card deck (rows)
 let dragged = null;
-let selectedBoardCard = null;     // card currently selected for movement
+let selectedBoardCard = null;     // card selected to move
+
+/* ──────────────── HUD update ──────────────── */
+function updateDeckHUD(){
+  const deckLeft = fullDeck.length;
+  const handCnt  = handEl.children.length;
+  deckCountEl.textContent = `Deck – (${deckLeft} + hand = ${handCnt})`;
+  drawBtn.disabled = deckLeft === 0;
+}
 
 /* ───────── drag & drop ───────── */
 document.addEventListener('pointerdown', e=>{
   if(!e.target.classList.contains('card')) return;
   dragged = e.target;
   dragged.classList.add('dragging');
-  dragged.setPointerCapture(e.pointerId); // establish capture first
-  dragged.style.pointerEvents = 'none';  // then turns off hit test
-  dragged.style.zIndex = '9999'; //keeps it on top
+  dragged.setPointerCapture(e.pointerId);       // capture first
+  dragged.style.pointerEvents = 'none';
+  dragged.style.zIndex = '9999';
 });
 
 document.addEventListener('pointermove', e=>{
   if(!dragged) return;
-
-  // keep card under the pointer
   dragged.style.position = 'fixed';
-  dragged.style.left = (e.clientX - 40) + 'px';   // 40 = half card width
-  dragged.style.top  = (e.clientY - 60) + 'px';   // 60 = half card height
+  dragged.style.left = (e.clientX - 40) + 'px';
+  dragged.style.top  = (e.clientY - 60) + 'px';
 
-  // (optional) show potential drop cell
   document.querySelectorAll('.cell.highlight')
           .forEach(c => c.classList.remove('highlight'));
 
@@ -282,7 +306,6 @@ document.addEventListener('pointermove', e=>{
     cell.classList.add('highlight');
   }
 });
-
 
 document.addEventListener('pointerup', e=>{
   if(!dragged) return;
@@ -293,25 +316,26 @@ document.addEventListener('pointerup', e=>{
 
   if(valid){
     cell.appendChild(dragged);
-    Object.assign(dragged.style, {position:'absolute', left:'4px', top:'4px'});
+    Object.assign(dragged.style,{position:'absolute',left:'4px',top:'4px'});
   }else{
     handEl.appendChild(dragged);
     dragged.style.position = 'static';
   }
 
-  dragged.style.pointerEvents = 'auto';      // ➋ restore hits
-  dragged.style.zIndex = ''; // resets stacking
+  dragged.style.pointerEvents = 'auto';
+  dragged.style.zIndex = '';
   dragged.classList.remove('dragging');
   dragged = null;
   document.querySelectorAll('.cell.highlight').forEach(c=>c.classList.remove('highlight'));
+
+  updateDeckHUD();                       // hand size changed
 });
 
-
 /* ──────────────── BOARD CARD MOVEMENT (click‑to‑move) ──────────────── */
+/*   -- unchanged from your version, but updateDeckHUD not needed here  */
 boardEl.addEventListener('click', e=>{
   const cardDiv = e.target.closest('.card');
-  if(!cardDiv) return;
-  if(cardDiv.parentElement === handEl) return;   // ignore if still in hand
+  if(!cardDiv || cardDiv.parentElement === handEl) return;
 
   const rowId = cardDiv.dataset.rowid;
   const row   = csvRows.find(r=>r.__id === rowId);
@@ -325,10 +349,8 @@ boardEl.addEventListener('click', e=>{
 
   clearMoveHighlights();
   selectedBoardCard = cardDiv;
-
   const origin = cardDiv.parentElement;
-  const r = +origin.dataset.row;
-  const c = +origin.dataset.col;
+  const r = +origin.dataset.row, c = +origin.dataset.col;
 
   const moves = [];
   if(isTrue(row[COL.up])   && r>0)            moves.push({r:r-1, c});
@@ -363,6 +385,19 @@ function clearMoveHighlights(){
   });
 }
 
+/* ──────────────── DRAW BUTTON ──────────────── */
+drawBtn.addEventListener('click', ()=>{
+  if(fullDeck.length === 0) return;
+  const row = fullDeck.shift();
+  const cardDiv = document.createElement('div');
+  cardDiv.className = 'card';
+  cardDiv.dataset.rowid = row.__id;
+  cardDiv.innerHTML = `${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`;
+  applyColour(cardDiv, row[COL.color]);
+  handEl.appendChild(cardDiv);
+  updateDeckHUD();
+});
+
 /* ──────────────── CSV LOADER ──────────────── */
 function loadCardsFromCSV(path){
   Papa.parse(path,{
@@ -371,12 +406,12 @@ function loadCardsFromCSV(path){
     skipEmptyLines:true,
     complete:({data})=>{
       if(!data.length){alert('CSV is empty');return;}
-      data = data.slice(0, 376); // only rows 1-376
+      data = data.slice(0, 376);
 
-      /* figure out which headers map to display + real names */
       const headers = Object.keys(data[0]).map(h=>h.trim());
       COL.name = headers.find(h=>/^name$/i.test(h) && !/^realname$/i.test(h)) || headers[0];
       COL.real = headers.find(h=>/^realname$/i.test(h)) || null;
+      COL.sub  = headers.find(h=>/^sub[\s_]*type$/i.test(h)) || COL.sub;
 
       data.forEach((row,idx)=>row.__id='id'+idx);
       csvRows = data;
@@ -387,97 +422,88 @@ function loadCardsFromCSV(path){
 
 /* ──────────────── GENERAL PICKER (G1 → G2 → G3) ──────────────── */
 function showGeneralPicker(){
-  const ALL_GENERALS = csvRows.filter(r => (r[COL.type]||'').toLowerCase() === 'general');
-  const STAGES       = ['G1','G2','G3'];           // order matters
-  let stageIndex     = 0;                          // 0 → 2
-  let chosenThisStage = null;                      // row object
+  const ALL_GENS = csvRows.filter(r => (r[COL.type]||'').toLowerCase() === 'general');
+  const STAGES   = ['G1','G2','G3'];
+  let idx = 0, chosenRow = null;
 
-  const heading   = document.getElementById('gp-heading');
-  const nextBtn   = document.getElementById('gp-next');
-
-  /** refresh grid for current stage */
   function loadStage(){
-    const targetSubtype = STAGES[stageIndex];
-    heading.textContent = `Select ${targetSubtype} (General ${stageIndex+1} of 3)`;
+    const target = STAGES[idx];
+    headingEl.textContent = `Select ${target} (General ${idx+1} of 3)`;
     nextBtn.disabled = true;
-    nextBtn.textContent = stageIndex < 2 ? 'Next →' : 'Done';
+    nextBtn.textContent = idx < 2 ? 'Next →' : 'Done';
+    gridEl.innerHTML = '';
 
-    gridEl.innerHTML = '';   // clear previous cards
-
-    ALL_GENERALS
-      .filter(r => (r[COL.sub]||'').toUpperCase() === targetSubtype)
-      .forEach(row =>{
-        const card = document.createElement('div');
-        card.className = 'general-card';
-        card.dataset.rowid = row.__id;
-        card.innerHTML = `<strong>${row[COL.name]||'?'}</strong><br><small>${row[COL.real]||''}</small>`;
-        applyColour(card, row[COL.color]);
-        gridEl.appendChild(card);
-      });
-    chosenThisStage = null;
+    ALL_GENS.filter(r => String(r[COL.sub]||'').trim().toUpperCase() === target)
+            .forEach(row=>{
+               const div = document.createElement('div');
+               div.className='general-card';
+               div.dataset.rowid=row.__id;
+               div.innerHTML = `<strong>${row[COL.name]}</strong><br><small>${row[COL.real]||''}</small>`;
+               applyColour(div, row[COL.color]);
+               gridEl.appendChild(div);
+            });
+    chosenRow = null;
   }
 
-  /* click on a card */
   gridEl.addEventListener('click', e=>{
     const card = e.target.closest('.general-card');
     if(!card) return;
-
     gridEl.querySelectorAll('.general-card.selected')
-          .forEach(el => el.classList.remove('selected'));
-
+          .forEach(el=>el.classList.remove('selected'));
     card.classList.add('selected');
-    chosenThisStage = csvRows.find(r => r.__id === card.dataset.rowid);
+    chosenRow = csvRows.find(r=>r.__id===card.dataset.rowid);
     nextBtn.disabled = false;
   });
 
-  /* next / done button */
   nextBtn.addEventListener('click', ()=>{
-    if(!chosenThisStage) return;
+    if(!chosenRow) return;
+    generalsChosen.push(chosenRow);
+    allowedColors.add((chosenRow[COL.color]||'').toLowerCase());
 
-    generalsChosen.push(chosenThisStage);
-    allowedColors.add((chosenThisStage[COL.color]||'').toLowerCase());
-
-    if(stageIndex < 2){
-      stageIndex += 1;
+    if(idx < 2){
+      idx += 1;
       loadStage();
     }else{
-      // finished all three
       modalEl.classList.add('hidden');
-      dealOpeningHand();
+      buildDeckAndStart();
     }
   });
 
-  // initialise
   loadStage();
   modalEl.classList.remove('hidden');
 }
 
-
-/* ──────────────── DEAL OPENING HAND ──────────────── */
-function dealOpeningHand(){
+/* ──────────────── BUILD 50‑CARD DECK & DEAL HAND ──────────────── */
+function buildDeckAndStart(){
   const legal = csvRows.filter(r=>{
     const col = (r[COL.color]||'').toLowerCase();
-    return allowedColors.has(col) || col==='colorless';
+    return allowedColors.has(col) || col === 'colorless';
   });
 
-  const pool=[...legal], chosen=[];
-  for(let i=0;i<7 && pool.length;i++){
-    const idx=Math.floor(Math.random()*pool.length);
-    chosen.push(pool.splice(idx,1)[0]);
+  if(legal.length < 50) alert('Warning: fewer than 50 legal cards – duplicates will occur');
+
+  // shuffle copy, then slice
+  fullDeck = [...legal].sort(()=>Math.random()-0.5);
+  while(fullDeck.length < 50) fullDeck.push(...fullDeck);
+  fullDeck = fullDeck.slice(0,50);
+
+  handEl.innerHTML = '';          // clear placeholders
+  dealOpeningHand();              // pops first 7
+  updateDeckHUD();
+}
+
+/* ──────────────── DEAL OPENING HAND (pops from fullDeck) ──────────────── */
+function dealOpeningHand(){
+  for(let i=0;i<7;i++){
+    const row = fullDeck.shift();
+    if(!row) break;
+    const cardDiv = document.createElement('div');
+    cardDiv.className='card';
+    cardDiv.dataset.rowid=row.__id;
+    cardDiv.innerHTML=`${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`;
+    applyColour(cardDiv, row[COL.color]);
+    handEl.appendChild(cardDiv);
   }
-
-  [...handEl.children].forEach((cardDiv,i)=>{
-    const row = chosen[i];
-    if(row){
-      cardDiv.dataset.rowid = row.__id;
-      cardDiv.innerHTML = `${row[COL.name]||'Unknown'}<br><small>${row[COL.real]||''}</small>`;
-      applyColour(cardDiv, row[COL.color]);
-    }else{
-      cardDiv.dataset.rowid = '';
-      cardDiv.textContent = 'Unknown';
-      cardDiv.style = ''; // clear any previous tint
-    }
-  });
 }
 
 /* ──────────────── UTIL ──────────────── */
@@ -494,8 +520,8 @@ function resizeBoard(){
   const maxCellH = (availH - (boardRows-1)*gap) / boardRows;
   const vw = wrapEl.clientWidth;
   const maxCellW = (vw - (boardCols-1)*gap) / boardCols;
-  const cellSize = Math.floor(Math.min(maxCellH, maxCellW));
-  document.documentElement.style.setProperty('--cell-size', cellSize+'px');
+  document.documentElement.style.setProperty('--cell-size',
+    Math.floor(Math.min(maxCellH, maxCellW))+'px');
 }
 window.addEventListener('resize', resizeBoard);
 window.addEventListener('orientationchange', resizeBoard);
